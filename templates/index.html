@@ -169,8 +169,8 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
       <div class="card hot-section">
         <h2>🔥 实时热门推荐</h2>
         <div class="hot-tabs">
-          <div class="hot-tab active" onclick="switchHotTab('stocks')">热门个股</div>
-          <div class="hot-tab" onclick="switchHotTab('industries')">热门行业</div>
+          <div class="hot-tab active" onclick="switchHotTab('stocks', event)">热门个股</div>
+          <div class="hot-tab" onclick="switchHotTab('industries', event)">热门行业</div>
           <div class="hot-refresh" onclick="loadHotData(true)">↻ 刷新</div>
         </div>
         <div class="hot-grid" id="hot-grid">
@@ -353,28 +353,45 @@ let hotTimer = null;
 async function init() {
   await loadPlatforms();
   await loadAIConfig();
-  loadHotData();
-  // 每 2 分钟自动刷新热门数据
+  await loadHotData();  // 等待热门数据加载完成
   hotTimer = setInterval(() => loadHotData(), 120000);
 }
 
 // ── 热门数据 ──
 async function loadHotData(force) {
+  const grid = document.getElementById('hot-grid');
+  const updateEl = document.getElementById('hot-update');
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 秒超时
     const url = force ? '/api/hot?_t=' + Date.now() : '/api/hot';
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
     const result = await resp.json();
-    if (result.ok) {
+    if (result.ok && result.data) {
       hotData = result.data;
-      renderHot();
+      if (!hotData.stocks || hotData.stocks.length === 0 && !hotData.industries || hotData.industries.length === 0) {
+        updateEl.textContent = result.data.update_time || '暂无实时数据（非交易时段）';
+        grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:20px">暂无实时数据<br><small>非交易时段或API限流，可手动输入代码分析</small></div>';
+      } else {
+        renderHot();
+      }
+    } else {
+      updateEl.textContent = '加载失败';
+      grid.innerHTML = '<div style="color:#d29922;grid-column:span 3;text-align:center;padding:10px">加载失败，<a href="javascript:loadHotData(true)" style="color:#58a6ff">点击重试</a></div>';
     }
-  } catch(e) { console.error('loadHot:', e); }
+  } catch(e) {
+    console.warn('loadHot:', e.name, e.message);
+    updateEl.textContent = '网络超时';
+    grid.innerHTML = '<div style="color:#d29922;grid-column:span 3;text-align:center;padding:10px">网络超时，<a href="javascript:loadHotData(true)" style="color:#58a6ff">点击重试</a></div>';
+  }
 }
 
-function switchHotTab(tab) {
+function switchHotTab(tab, evt) {
   hotTab = tab;
   document.querySelectorAll('.hot-tab').forEach(t => t.classList.remove('active'));
-  event.target.classList.add('active');
+  if (evt && evt.target) evt.target.classList.add('active');
+  else document.querySelector(`.hot-tab[onclick*="${tab}"]`)?.classList.add('active');
   renderHot();
 }
 

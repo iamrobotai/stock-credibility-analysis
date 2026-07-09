@@ -257,34 +257,11 @@ def index():
 
 @app.route("/api/hot")
 def api_hot():
-    """获取实时热门股票与行业 (5秒超时降级)"""
+    """获取实时热门股票与行业 (简化版，无线程嵌套)"""
     try:
         from hot_stocks import get_all_hot
-        import signal
-        # 使用线程超时保护
-        result = {"ok": True, "data": {"stocks": [], "industries": [], "concepts": [], "update_time": "加载超时"}}
-        
-        def _fetch():
-            nonlocal result
-            data = get_all_hot()
-            result = {"ok": True, "data": data}
-        
-        import threading
-        t = threading.Thread(target=_fetch, daemon=True)
-        t.start()
-        t.join(timeout=6.0)
-        if t.is_alive():
-            # 返回降级数据
-            result = {
-                "ok": True,
-                "data": {
-                    "stocks": [],
-                    "industries": [],
-                    "concepts": [],
-                    "update_time": "网络超时，请刷新重试",
-                }
-            }
-        return jsonify(result)
+        data = get_all_hot()
+        return jsonify({"ok": True, "data": data})
     except Exception as e:
         return jsonify({
             "ok": True,
@@ -292,7 +269,7 @@ def api_hot():
                 "stocks": [],
                 "industries": [],
                 "concepts": [],
-                "update_time": f"加载失败: {str(e)[:50]}",
+                "update_time": f"API限流: {str(e)[:40]}",
             }
         })
 
