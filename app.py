@@ -244,13 +244,44 @@ def index():
 
 @app.route("/api/hot")
 def api_hot():
-    """获取实时热门股票与行业"""
+    """获取实时热门股票与行业 (5秒超时降级)"""
     try:
         from hot_stocks import get_all_hot
-        data = get_all_hot()
-        return jsonify({"ok": True, "data": data})
+        import signal
+        # 使用线程超时保护
+        result = {"ok": True, "data": {"stocks": [], "industries": [], "concepts": [], "update_time": "加载超时"}}
+        
+        def _fetch():
+            nonlocal result
+            data = get_all_hot()
+            result = {"ok": True, "data": data}
+        
+        import threading
+        t = threading.Thread(target=_fetch, daemon=True)
+        t.start()
+        t.join(timeout=6.0)
+        if t.is_alive():
+            # 返回降级数据
+            result = {
+                "ok": True,
+                "data": {
+                    "stocks": [],
+                    "industries": [],
+                    "concepts": [],
+                    "update_time": "网络超时，请刷新重试",
+                }
+            }
+        return jsonify(result)
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)[:200]})
+        return jsonify({
+            "ok": True,
+            "data": {
+                "stocks": [],
+                "industries": [],
+                "concepts": [],
+                "update_time": f"加载失败: {str(e)[:50]}",
+            }
+        })
 
 
 @app.route("/api/resolve/<code>")
@@ -572,17 +603,17 @@ def api_industry_preview():
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("股票可信度分析系统 v2.0 - 本地版")
+    print("股票可信度分析系统 v2.3 - 本地版")
     print("=" * 50)
     print(f"数据目录: {DATA_DIR}")
     print(f"输出目录: {OUTPUT_DIR}")
     print()
     print("新功能:")
-    print("  - 股票代码自动解析 (输入代码→自动获取名称/行业)")
-    print("  - 多 AI 提供商 (Ollama/DeepSeek/通义千问/OpenAI/智谱)")
-    print("  - 数据源平台选择 (13平台可选)")
-    print("  - 情绪帖过滤 (减少情绪化帖子引用)")
+    print("  - 在线预览（6 Tab 模态框，直接查看无需下载）")
+    print("  - 增强曲线标注（涨跌>5%/波段>15% + 放大插图）")
+    print("  - Excel 导出（7 Sheets）")
+    print("  - 原始数据链接（13平台可点击直达原文）")
     print()
     print("访问: http://localhost:5000")
     print("=" * 50)
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

@@ -22,13 +22,13 @@ _cache = {}
 _CACHE_TTL = 120  # 2分钟缓存
 
 
-def _push2_get(path, retries=2):
-    """尝试多个 push2 CDN 节点"""
-    for node in _PUSH2_NODES:
+def _push2_get(path, retries=1):
+    """尝试多个 push2 CDN 节点 (快速失败)"""
+    for node in _PUSH2_NODES[:3]:  # 仅前3个节点，减少总耗时
         url = f"https://{node}.eastmoney.com{path}"
         for attempt in range(retries):
             try:
-                r = requests.get(url, headers={"User-Agent": UA}, timeout=8)
+                r = requests.get(url, headers={"User-Agent": UA}, timeout=5)
                 data = r.json()
                 items = data.get("data", {}).get("diff", [])
                 if items:
@@ -42,7 +42,7 @@ def _sina_industries():
     """新浪行业排行 (备用, 返回 49 个行业 + 领涨股)"""
     url = "http://vip.stock.finance.sina.com.cn/q/view/newSinaHy.php"
     try:
-        r = requests.get(url, headers={"User-Agent": UA}, timeout=10)
+        r = requests.get(url, headers={"User-Agent": UA}, timeout=5)
         text = r.text
         # 格式: var FEED = {"code":"code,name,count,avg_price,avg_change,avg_change_pct,...", ...}
         import re
@@ -88,7 +88,7 @@ def _sina_gainers(count=15):
            f"Market_Center.getHQNodeData?page=1&num={count}&sort=changepercent&asc=0"
            f"&node=hs_a&symbol=&_s_r_a=sort")
     try:
-        r = requests.get(url, headers={"User-Agent": UA}, timeout=10)
+        r = requests.get(url, headers={"User-Agent": UA}, timeout=5)
         items = json.loads(r.text)
         return items
     except Exception:
