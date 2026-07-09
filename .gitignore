@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Data directories (runtime data, not source code)
+data/
+*.json.tmp
+
+# Output files (generated reports)
+*_完整分析.docx
+*_分析.docx
+*.zip
+*_chart.png
+*_segments.json
+*_raw.json
+*_scored.json
+*_llm.json
+*_kline.json
+kline_*.json
+segments*.json
+
+# Config files with API keys
+ai_config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Test files
+test_*.py
+debug_*.py
+probe_*.py
+warmup_*.py
