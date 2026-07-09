@@ -129,15 +129,17 @@ def collect_kline(code, days=1095):
 
 def collect_news(code, limit=15):
     df = _retry(lambda: ak.stock_news_em(symbol=code))
+    stock_url = f"https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={'SH' if code.startswith('6') else 'SZ'}{code}#/news"
     items = []
     for _, r in df.head(limit).iterrows():
+        news_url = str(r.get("新闻链接", ""))
         items.append({
             "id": f"N-{len(items)+1:02d}",
             "title": str(r.get("新闻标题", "")),
             "content": str(r.get("新闻内容", ""))[:600],
             "time": str(r.get("发布时间", "")),
             "source": str(r.get("文章来源", "")),
-            "url": str(r.get("新闻链接", "")),
+            "url": news_url if news_url else stock_url,
         })
     return items
 
@@ -145,6 +147,7 @@ def collect_news(code, limit=15):
 def collect_reports(code, limit=30):
     df = _retry(lambda: ak.stock_research_report_em(symbol=code))
     items = []
+    report_url = f"https://data.eastmoney.com/report/zw/stock/{code}.html"
     for _, r in df.head(limit).iterrows():
         items.append({
             "id": f"R-{len(items)+1:02d}",
@@ -158,13 +161,18 @@ def collect_reports(code, limit=30):
             "eps_2028": str(r.get("2028-盈利预测-收益", "")),
             "pe_2028": str(r.get("2028-盈利预测-市盈率", "")),
             "date": str(r.get("日期", "")),
+            "url": report_url,
         })
     return items
 
 
 def collect_financials(code):
     df = _retry(lambda: ak.stock_financial_abstract(symbol=code))
-    return df.to_dict("records")
+    records = df.to_dict("records")
+    fin_url = f"https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={'SH' if code.startswith('6') else 'SZ'}{code}#/cwfx"
+    for r in records:
+        r["url"] = fin_url
+    return records
 
 
 # ============================================================
@@ -214,6 +222,7 @@ def collect_cninfo(code, limit=15):
 
 def collect_ir(code, limit=15):
     """互动易 — 投资者问答 (公司官方回应)"""
+    ir_url = f"http://irm.cninfo.com.cn/ircs/search?keyword={code}"
     try:
         df = ak.stock_irm_cninfo(symbol=code)
         items = []
@@ -224,6 +233,7 @@ def collect_ir(code, limit=15):
                 "answer": str(r.get("回答内容", r.get("回复", "")))[:300],
                 "date": str(r.get("提问时间", r.get("日期", ""))),
                 "source": "互动易",
+                "url": ir_url,
             })
         return items
     except Exception:
@@ -236,7 +246,7 @@ def collect_ths(code):
     try:
         resp = _retry(lambda: requests.get(url, headers={"User-Agent": UA}, timeout=10))
         soup = BeautifulSoup(resp.text, "html.parser")
-        data = {"tables": [], "evaluation": ""}
+        data = {"url": url, "tables": [], "evaluation": ""}
         eval_el = soup.find("span", id="evaluation")
         if eval_el:
             data["evaluation"] = eval_el.get_text(strip=True)
@@ -282,13 +292,17 @@ def collect_lhb(code):
     """东财 — 近3月龙虎榜"""
     end = datetime.now().strftime("%Y%m%d")
     start = (datetime.now() - timedelta(days=90)).strftime("%Y%m%d")
+    lhb_url = f"https://data.eastmoney.com/stock/lhb,{code}.html"
     try:
         df = ak.stock_lhb_detail_em(start_date=start, end_date=end)
         if "代码" in df.columns:
             df = df[df["代码"] == code]
         elif "股票代码" in df.columns:
             df = df[df["股票代码"] == code]
-        return df.to_dict("records")
+        records = df.to_dict("records")
+        for r in records:
+            r["url"] = lhb_url
+        return records
     except Exception:
         return []
 
@@ -296,18 +310,26 @@ def collect_lhb(code):
 def collect_xueqiu(code):
     """雪球 — 个股基本面"""
     sym = f"SH{code}" if code.startswith("6") else f"SZ{code}"
+    xq_url = f"https://xueqiu.com/S/{sym}"
     try:
         df = ak.stock_individual_basic_info_xq(symbol=sym)
-        return df.to_dict("records")
+        records = df.to_dict("records")
+        for r in records:
+            r["url"] = xq_url
+        return records
     except Exception:
         return []
 
 
 def collect_comment(code):
     """东财 — 市场情绪/综合评价"""
+    comment_url = f"https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={'SH' if code.startswith('6') else 'SZ'}{code}"
     try:
         df = ak.stock_comment_em(symbol=code)
-        return df.to_dict("records")
+        records = df.to_dict("records")
+        for r in records:
+            r["url"] = comment_url
+        return records
     except Exception:
         return []
 
@@ -386,7 +408,15 @@ def collect(code, name="", outdir="data", platforms=None, filter_emotion=True):
         platforms = DEFAULT_PLATFORMS
 
     os.makedirs(outdir, exist_ok=True)
-    result = {"code": code, "name": name, "fetch_time": datetime.now().isoformat()}
+    prefix = "SH" if code.startswith("6") else "SZ"
+    stock_url = f"https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={prefix}{code}"
+    result = {
+        "code": code, "name": name,
+        "stock_url": stock_url,
+        "guba_url": f"https://guba.eastmoney.com/list,{code}.html",
+        "cninfo_url": f"http://www.cninfo.com.cn/new/disclosure/stock?stockCode={code}&orgId=",
+        "fetch_time": datetime.now().isoformat(),
+    }
     print(f"\n>>> [{code}] {name} | 平台: {len(platforms)}个")
 
     # 平台调度表

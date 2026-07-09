@@ -10,7 +10,7 @@ import os, sys, json, time, threading, traceback, glob
 from pathlib import Path
 from datetime import datetime
 
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, Response
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
@@ -123,18 +123,30 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
             process_stock(code, provider=ai_provider, config=ai_config)
             state.log(f"[{name}] LLM 分析完成", "ok")
 
-        # Step 5: 生成 docx
-        state.log(f"[{name}] 生成 Word 报告...", "info")
+        # Step 5: 生成 docx + excel
+        state.log(f"[{name}] 生成报告...", "info")
         from gen_docx_full import generate
         safe_name = name.replace("/", "_").replace(" ", "")
-        docx_name = f"{safe_name}_{code}_完整分析.docx"
         generate(code, name, industry)
+        docx_name = f"{safe_name}_{code}_完整分析.docx"
         docx_path = OUTPUT_DIR / docx_name
+
+        # Excel 导出
+        xlsx_name = None
+        try:
+            from gen_excel import generate as gen_xlsx
+            gen_xlsx(code, name, industry)
+            xlsx_name = f"{safe_name}_{code}_分析.xlsx"
+            state.log(f"[{name}] Excel 已生成", "ok")
+        except Exception as e:
+            state.log(f"[{name}] Excel 跳过: {str(e)[:60]}", "warn")
 
         if docx_path.exists():
             result["status"] = "ok"
             result["docx"] = docx_name
-            state.log(f"[{name}] ✅ 完成: {docx_name} ({docx_path.stat().st_size//1024}KB)", "ok")
+            result["xlsx"] = xlsx_name
+            result["code"] = code
+            state.log(f"[{name}] 完成: {docx_name} ({docx_path.stat().st_size//1024}KB)", "ok")
             state.success += 1
         else:
             result["status"] = "fail"
@@ -206,6 +218,11 @@ def run_batch_task(state):
                         if docx_path.exists():
                             industry = next((s.get("industry", "other") for s in stocks if s["code"] == r["code"]), "other")
                             z.write(docx_path, f"{industry}/{r['docx']}")
+                    if r.get("xlsx"):
+                        xlsx_path = OUTPUT_DIR / r["xlsx"]
+                        if xlsx_path.exists():
+                            industry = next((s.get("industry", "other") for s in stocks if s["code"] == r["code"]), "other")
+                            z.write(xlsx_path, f"{industry}/{r['xlsx']}")
             state.zip = zip_name
             state.log(f"ZIP 完成: {zip_name} ({zip_path.stat().st_size//1024//1024}MB)", "ok")
 
@@ -348,10 +365,209 @@ def download(filename):
 @app.route("/api/stocks")
 def api_stocks():
     docx_files = sorted(glob.glob(str(OUTPUT_DIR / "*完整分析.docx")), key=os.path.getmtime, reverse=True)
-    return jsonify({
-        "total": len(docx_files),
-        "files": [{"name": os.path.basename(f), "size": os.path.getsize(f)//1024} for f in docx_files[:50]]
-    })
+    files = []
+    for f in docx_files[:100]:
+        name = os.path.basename(f)
+        # Extract code from filename
+        parts = name.rsplit("_", 2)
+        code = parts[-2] if len(parts) >= 2 else ""
+        xlsx_name = name.replace("_完整分析.docx", "_分析.xlsx")
+        has_xlsx = (OUTPUT_DIR / xlsx_name).exists()
+        files.append({
+            "name": name, "size": os.path.getsize(f) // 1024,
+            "code": code, "xlsx": xlsx_name if has_xlsx else None,
+        })
+    return jsonify({"total": len(files), "files": files})
+
+
+@app.route("/api/preview/<code>")
+def api_preview(code):
+    """结构化预览数据，前端渲染为 HTML"""
+    try:
+        raw_path = DATA_DIR / f"{code}_raw.json"
+        scored_path = DATA_DIR / f"{code}_scored.json"
+        llm_path = DATA_DIR / f"{code}_llm.json"
+
+        if not raw_path.exists():
+            return jsonify({"ok": False, "error": f"无 {code} 的数据，请先运行分析"})
+
+        raw = json.load(open(raw_path, encoding="utf-8"))
+        scored = json.load(open(scored_path, encoding="utf-8")) if scored_path.exists() else {"posts": [], "segments": []}
+        llm_data = json.load(open(llm_path, encoding="utf-8")) if llm_path.exists() else {}
+
+        kline = raw.get("kline", [])
+        segments = scored.get("segments", [])
+        posts = scored.get("posts", [])
+        financials = raw.get("financials", [])
+        news = raw.get("news", [])
+        reports = raw.get("reports", [])
+
+        # K线摘要
+        kline_summary = {}
+        if kline:
+            last = kline[-1]
+            first = kline[0]
+            total_ret = (last["close"] - first["close"]) / first["close"] * 100
+            highs = [b["high"] for b in kline]
+            lows = [b["low"] for b in kline]
+            # 计算日涨跌幅 >5% 的天数
+            big_days = 0
+            for i in range(1, len(kline)):
+                prev = kline[i - 1]["close"]
+                curr = kline[i]["close"]
+                if prev > 0 and abs((curr - prev) / prev * 100) >= 5:
+                    big_days += 1
+            kline_summary = {
+                "start_date": first["date"], "end_date": last["date"],
+                "total_bars": len(kline), "total_return": round(total_ret, 1),
+                "max_high": round(max(highs), 2), "min_low": round(min(lows), 2),
+                "last_close": round(last["close"], 2),
+                "big_move_days": big_days,
+            }
+
+        # 来源可信度均值
+        by_type = {}
+        for p in posts:
+            t = p.get("source_type", "?")
+            by_type.setdefault(t, []).append(p.get("avg_d", 0))
+        source_avg = {t: round(sum(s) / len(s), 2) for t, s in by_type.items()}
+
+        # 广告帖
+        ads = [p for p in posts if p.get("D8", {}).get("is_ad")]
+
+        # LLM 分析
+        llm_analysis = None
+        if llm_data.get("success") and llm_data.get("analysis"):
+            llm_analysis = llm_data["analysis"]
+            llm_analysis["stats"] = llm_data.get("stats", {})
+
+        return jsonify({
+            "ok": True,
+            "data": {
+                "code": code,
+                "name": raw.get("name", code),
+                "stock_url": raw.get("stock_url", ""),
+                "guba_url": raw.get("guba_url", ""),
+                "kline_summary": kline_summary,
+                "segments": segments,
+                "posts": posts[:50],
+                "posts_total": len(posts),
+                "source_avg": source_avg,
+                "ads": ads[:10],
+                "ads_total": len(ads),
+                "news": news[:15],
+                "reports": reports[:10],
+                "financials": financials[:15],
+                "llm": llm_analysis,
+                "has_chart": (DATA_DIR / f"{code}_chart.png").exists(),
+            }
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@app.route("/api/chart/<code>")
+def api_chart(code):
+    """返回图表 PNG"""
+    # 先尝试已有图表
+    chart_path = DATA_DIR / f"{code}_chart.png"
+    if not chart_path.exists():
+        # 动态生成
+        raw_path = DATA_DIR / f"{code}_raw.json"
+        seg_path = DATA_DIR / f"{code}_segments.json"
+        if raw_path.exists():
+            raw = json.load(open(raw_path, encoding="utf-8"))
+            segs = json.load(open(seg_path, encoding="utf-8")) if seg_path.exists() else []
+            try:
+                from chart_gen import gen_stock_chart
+                gen_stock_chart(code, raw.get("kline", []), segs, outdir=str(DATA_DIR))
+            except Exception:
+                pass
+    if chart_path.exists():
+        return send_file(str(chart_path), mimetype="image/png")
+    return "Chart not found", 404
+
+
+@app.route("/api/export/excel/<code>")
+def api_export_excel(code):
+    """生成并下载 Excel"""
+    try:
+        from gen_excel import generate as gen_xlsx
+        # 从 scored 或 raw 获取名称
+        name = code
+        industry = ""
+        scored_path = DATA_DIR / f"{code}_scored.json"
+        raw_path = DATA_DIR / f"{code}_raw.json"
+        if raw_path.exists():
+            raw = json.load(open(raw_path, encoding="utf-8"))
+            name = raw.get("name", code)
+        path = gen_xlsx(code, name, industry)
+        if path and os.path.exists(path):
+            return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+        return jsonify({"ok": False, "error": "Excel 生成失败"}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]}), 500
+
+
+@app.route("/api/industry/chart", methods=["POST"])
+def api_industry_chart():
+    """行业多股走势叠加图"""
+    try:
+        data = request.json or {}
+        industry_name = data.get("industry", "行业对比")
+        stock_codes = data.get("codes", [])
+
+        if not stock_codes:
+            return jsonify({"ok": False, "error": "请提供股票代码列表"})
+
+        stocks_data = []
+        for code in stock_codes:
+            raw_path = DATA_DIR / f"{code}_raw.json"
+            if raw_path.exists():
+                raw = json.load(open(raw_path, encoding="utf-8"))
+                stocks_data.append({
+                    "code": code,
+                    "name": raw.get("name", code),
+                    "kline": raw.get("kline", []),
+                })
+
+        if not stocks_data:
+            return jsonify({"ok": False, "error": "无可用数据，请先运行分析"})
+
+        from chart_gen import gen_industry_chart
+        path = gen_industry_chart(stocks_data, industry_name, outdir=str(DATA_DIR))
+        if path:
+            safe_name = industry_name.replace("/", "_").replace(" ", "")
+            return jsonify({"ok": True, "chart": f"industry_{safe_name}_chart.png"})
+        return jsonify({"ok": False, "error": "图表生成失败"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@app.route("/api/industry/preview")
+def api_industry_preview():
+    """行业对比预览：返回所有已分析股票列表"""
+    try:
+        # 扫描 data 目录中的 raw 文件
+        raw_files = sorted(DATA_DIR.glob("*_raw.json"), key=os.path.getmtime, reverse=True)
+        stocks = []
+        for f in raw_files[:200]:
+            code = f.stem.replace("_raw", "")
+            try:
+                raw = json.load(open(f, encoding="utf-8"))
+                kline = raw.get("kline", [])
+                if kline:
+                    stocks.append({
+                        "code": code,
+                        "name": raw.get("name", code),
+                        "last_close": kline[-1]["close"],
+                        "total_return": round((kline[-1]["close"] - kline[0]["close"]) / kline[0]["close"] * 100, 1),
+                    })
+            except Exception:
+                continue
+        return jsonify({"ok": True, "stocks": stocks})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
 
 
 if __name__ == "__main__":

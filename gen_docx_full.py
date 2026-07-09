@@ -33,48 +33,13 @@ def _fmt_money(v):
 
 
 def _chart(code, kline, segments):
-    """生成价格分段曲线 PNG"""
+    """生成增强版价格曲线 PNG（标注大幅波动 + 放大插图）"""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.dates as mdates
-        from datetime import datetime as dt
-        plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "SimSun"]
-        plt.rcParams["axes.unicode_minus"] = False
-    except ImportError:
+        from chart_gen import gen_stock_chart
+        return gen_stock_chart(code, kline, segments, outdir=DATADIR)
+    except Exception as e:
+        print(f"[chart] fallback: {e}")
         return None
-
-    dates = [dt.strptime(b["date"], "%Y-%m-%d") for b in kline]
-    closes = [b["close"] for b in kline]
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(dates, closes, color="#333333", linewidth=0.8, label="收盘价(前复权)")
-
-    colors = {"涨": "#DC143C", "跌": "#228B22"}
-    for seg in segments:
-        try:
-            s = dt.strptime(seg["start_date"], "%Y-%m-%d")
-            e = dt.strptime(seg["end_date"], "%Y-%m-%d")
-            ax.axvspan(s, e, alpha=0.12, color=colors.get(seg["direction"], "#888"))
-            mid_i = (seg.get("_s", 0) + seg.get("_e", 0)) // 2
-            ax.annotate(f"{seg['id']} {seg['direction']}{seg['pct']:+.0f}%",
-                        xy=(e, seg["end_price"]), fontsize=7, color=colors.get(seg["direction"], "#333"))
-        except Exception:
-            continue
-
-    ax.set_title(f"{code} 价格分段曲线", fontsize=11)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
-    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
-    fig.autofmt_xdate()
-    fig.tight_layout()
-
-    path = os.path.join(DATADIR, f"{code}_chart.png")
-    fig.savefig(path, dpi=150)
-    plt.close(fig)
-    return path
 
 
 def generate(code, name, industry="", fmatrix=None):
@@ -321,8 +286,12 @@ def generate(code, name, industry="", fmatrix=None):
     # §5 新闻互证
     doc.add_heading("§5 新闻互证", level=1)
     for n in news[:8]:
-        add_bullet(doc, f"{n.get('title','')[:55]}",
-                   bold_lead=f"{n.get('time','')[:10]} [{n.get('source','')[:6]}] ")
+        n_url = n.get("url", "")
+        n_title = n.get("title", "")[:55]
+        n_source = n.get("source", "")[:6]
+        n_time = str(n.get("time", ""))[:10]
+        url_text = f"  [原文: {n_url}]" if n_url else ""
+        add_bullet(doc, f"{n_title}{url_text}", bold_lead=f"{n_time} [{n_source}] ")
 
     # §6 分类注意点
     doc.add_heading("§6 分类与注意点", level=1)
