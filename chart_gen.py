@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-chart_gen.py - 增强版图表生成器
+chart_gen.py - 增强版图表生成器 v2.4
 1. 标注涨跌幅较大时间点（日涨跌>5% 或波段涨跌>15%）
 2. 关键波段放大插图
 3. 行业多股走势叠加图
+4. 技术指标叠加（MACD/KDJ/RSI/BOLL 子图）
 """
-import json, os
+import json, os, numpy as np
 from datetime import datetime as dt
 
 
@@ -254,3 +255,109 @@ if __name__ == "__main__":
         print(f"Chart saved: {path}")
     else:
         print(f"No data for {code}")
+
+
+def gen_technical_chart(code, kline, outdir="data"):
+    """
+    技术指标叠加图: 价格+成交量 + MACD + KDJ + RSI/BOLL
+    """
+    if not kline:
+        return None
+    plt, mdates = _setup_matplotlib()
+
+    dates = [dt.strptime(b["date"], "%Y-%m-%d") for b in kline]
+    closes = np.array([b["close"] for b in kline])
+    highs = np.array([b["high"] for b in kline])
+    lows = np.array([b["low"] for b in kline])
+    opens = np.array([b["open"] for b in kline])
+    volumes = np.array([b.get("volume", 0) for b in kline])
+
+    try:
+        from technical import compute_macd, compute_kdj, compute_rsi, compute_boll
+        macd = compute_macd(closes)
+        kdj = compute_kdj(highs, lows, closes)
+        rsi = compute_rsi(closes)
+        boll = compute_boll(closes)
+    except Exception:
+        return None
+
+    # 4 行子图
+    fig, axes = plt.subplots(4, 1, figsize=(14, 10), sharex=True,
+                              gridspec_kw={"height_ratios": [3, 1.2, 1.2, 1.2]})
+
+    ax1, ax2, ax3, ax4 = axes
+
+    # ---- 子图1: K线 + 布林带 ----
+    # 蜡烛图简化：阳线白色，阴线深色
+    for i in range(len(dates)):
+        if closes[i] >= opens[i]:
+            color = "#DC143C"
+            body_bottom = opens[i]
+            body_top = closes[i]
+        else:
+            color = "#228B22"
+            body_bottom = closes[i]
+            body_top = opens[i]
+        ax1.plot([dates[i], dates[i]], [lows[i], highs[i]], color=color, linewidth=0.6)
+        ax1.plot([dates[i], dates[i]], [body_bottom, body_top], color=color, linewidth=3)
+
+    # 布林带
+    boll_upper = np.array(boll["UPPER"])
+    boll_mid = np.array(boll["MIDDLE"])
+    boll_lower = np.array(boll["LOWER"])
+    valid = ~np.isnan(boll_mid)
+    if np.any(valid):
+        ax1.plot(np.array(dates)[valid], boll_mid[valid], color="#FF9800", linewidth=0.8, alpha=0.7, label="BOLL中轨")
+        ax1.plot(np.array(dates)[valid], boll_upper[valid], color="#FF9800", linewidth=0.5, alpha=0.4, linestyle=":")
+        ax1.plot(np.array(dates)[valid], boll_lower[valid], color="#FF9800", linewidth=0.5, alpha=0.4, linestyle=":")
+        ax1.fill_between(np.array(dates)[valid], boll_upper[valid], boll_lower[valid], alpha=0.05, color="#FF9800")
+
+    ax1.set_title(f"{code} 技术分析（K线+布林带/MACD/KDJ/RSI）", fontsize=10)
+    ax1.legend(fontsize=7, loc="upper left")
+    ax1.grid(True, alpha=0.3)
+
+    # ---- 子图2: MACD ----
+    dif = np.array(macd["DIF"])
+    dea = np.array(macd["DEA"])
+    macd_bar = np.array(macd["MACD"])
+    ax2.bar(dates, macd_bar, width=0.8, color=np.where(macd_bar >= 0, "#DC143C", "#228B22"), alpha=0.6)
+    ax2.plot(dates, dif, color="#FFFFFF", linewidth=0.8, label="DIF")
+    ax2.plot(dates, dea, color="#FF9800", linewidth=0.8, label="DEA")
+    ax2.axhline(y=0, color="#666666", linewidth=0.3)
+    ax2.set_ylabel("MACD", fontsize=8)
+    ax2.legend(fontsize=6, loc="upper left")
+    ax2.grid(True, alpha=0.3)
+
+    # ---- 子图3: KDJ ----
+    k = np.array(kdj["K"])
+    d = np.array(kdj["D"])
+    j = np.array(kdj["J"])
+    ax3.plot(dates, k, color="#FFFFFF", linewidth=0.8, label="K")
+    ax3.plot(dates, d, color="#FF9800", linewidth=0.8, label="D")
+    ax3.plot(dates, j, color="#E040FB", linewidth=0.8, label="J")
+    ax3.axhline(y=80, color="#DC143C", linewidth=0.3, linestyle=":")
+    ax3.axhline(y=20, color="#228B22", linewidth=0.3, linestyle=":")
+    ax3.set_ylabel("KDJ", fontsize=8)
+    ax3.legend(fontsize=6, loc="upper left")
+    ax3.grid(True, alpha=0.3)
+
+    # ---- 子图4: RSI ----
+    rsi6 = np.array(rsi["RSI"])
+    ax4.plot(dates, rsi6, color="#58A6FF", linewidth=0.8, label="RSI(6)")
+    ax4.axhline(y=70, color="#DC143C", linewidth=0.3, linestyle=":")
+    ax4.axhline(y=30, color="#228B22", linewidth=0.3, linestyle=":")
+    ax4.axhline(y=50, color="#666666", linewidth=0.3, linestyle="--")
+    ax4.set_ylabel("RSI", fontsize=8)
+    ax4.legend(fontsize=6, loc="upper left")
+    ax4.grid(True, alpha=0.3)
+
+    # 共享 X 轴
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+    ax4.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    fig.autofmt_xdate()
+    fig.tight_layout()
+
+    path = os.path.join(outdir, f"{code}_tech_chart.png")
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path

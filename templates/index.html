@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>股票可信度分析系统 v2.3</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>股票可信度分析系统 v2.4</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
@@ -154,8 +157,8 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 </head>
 <body>
 <div class="header">
-  <h1>📊 股票可信度分析系统 v2.3</h1>
-  <span class="badge">预览 · Excel · 标注 · 链接</span>
+  <h1>📊 股票可信度分析系统 v2.4</h1>
+  <span class="badge">指标 · 形态 · 预览 · 链接</span>
 </div>
 
 <div class="container">
@@ -812,6 +815,7 @@ function renderPreview(data) {
   html += '<div class="preview-tab" onclick="switchPreviewTab(\'scores\',event)">📋 D1-D8</div>';
   html += '<div class="preview-tab" onclick="switchPreviewTab(\'segments\',event)">📊 分段</div>';
   html += '<div class="preview-tab" onclick="switchPreviewTab(\'llm\',event)">🤖 LLM</div>';
+  html += '<div class="preview-tab" onclick="switchPreviewTab(\'technical\',event)">📐 技术指标</div>';
   html += '<div class="preview-tab" onclick="switchPreviewTab(\'news\',event)">📰 新闻/研报</div>';
   html += '</div>';
 
@@ -913,6 +917,12 @@ function renderPreview(data) {
   }
   html += '</div>';
 
+  // Technical indicators tab
+  html += '<div class="preview-section" id="tab-technical">';
+  html += '<div id="tech-loading" style="text-align:center;padding:20px;color:#8b949e">加载技术指标中...</div>';
+  html += '<div id="tech-content" style="display:none"></div>';
+  html += '</div>';
+
   // News & Reports
   html += '<div class="preview-section" id="tab-news">';
   if ((data.reports||[]).length) {
@@ -950,11 +960,95 @@ function switchPreviewTab(tab, evt) {
   document.querySelectorAll('.preview-section').forEach(s => s.classList.remove('active'));
   evt.target.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
+  // 技术指标标签页异步加载
+  if (tab === 'technical' && previewCode) {
+    loadTechnicalData();
+  }
 }
 
 // ── 行业对比 ──
 let industryStocks = [];
 let selectedIndustryStocks = new Set();
+
+// ── 技术指标加载 ──
+async function loadTechnicalData() {
+  if (!previewCode) return;
+  const loading = document.getElementById('tech-loading');
+  const content = document.getElementById('tech-content');
+  if (!loading || !content) return;
+  loading.style.display = '';
+  content.style.display = 'none';
+  try {
+    const resp = await fetch(`/api/technical/${previewCode}?_v=24`);
+    const data = await resp.json();
+    if (data.ok) {
+      const d = data.data;
+      const inds = d.indicators || {};
+      let html = '';
+
+      // D9 评分卡片
+      if (d.d9_score) {
+        const d9 = d.d9_score;
+        const d9c = d9.score >= 0.7 ? '#3fb950' : (d9.score >= 0.4 ? '#d29922' : '#f85149');
+        html += `<div style="background:#21262d;border-radius:8px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:16px">`;
+        html += `<div style="font-size:36px;font-weight:bold;color:${d9c}">${(d9.score*100).toFixed(0)}</div>`;
+        html += `<div><div style="font-size:14px;font-weight:bold;color:#58a6ff">D9 技术信号评分</div><div style="font-size:12px;color:#c9d1d9">${d9.summary}</div></div>`;
+        html += `</div>`;
+
+        if (d9.details) {
+          const dt = d9.details;
+          html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">';
+          if (dt.MACD) html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.MACD.DIF} ${dt.MACD.DEA}</div><div class="lbl">MACD(DIF/DEA)</div></div>`;
+          if (dt.KDJ) html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.KDJ.K} ${dt.KDJ.D} ${dt.KDJ.J}</div><div class="lbl">KDJ(K/D/J)</div></div>`;
+          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.RSI6||'-'}</div><div class="lbl">RSI(6)</div></div>`;
+          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.RSI12||'-'}</div><div class="lbl">RSI(12)</div></div>`;
+          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.RSI24||'-'}</div><div class="lbl">RSI(24)</div></div>`;
+          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.buy_patterns}买 / ${dt.sell_patterns}卖</div><div class="lbl">近20日形态</div></div>`;
+          html += '</div>';
+        }
+      }
+
+      // 指标详细值
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+      for (let [name, ind] of Object.entries(inds)) {
+        if (!ind) continue;
+        html += `<div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px">`;
+        html += `<div style="font-size:13px;font-weight:bold;color:#58a6ff;margin-bottom:6px">${name}</div>`;
+        html += `<div style="font-size:11px;color:#3fb950">${ind.status || ''}</div>`;
+        if (ind.latest && typeof ind.latest === 'object') {
+          for (let [k, v] of Object.entries(ind.latest)) {
+            html += `<div style="font-size:11px;color:#8b949e">${k}: ${typeof v === 'number' ? v.toFixed(2) : v}</div>`;
+          }
+        } else if (ind.latest !== undefined && ind.latest !== null) {
+          html += `<div style="font-size:14px;font-weight:bold;color:#c9d1d9">${typeof ind.latest === 'number' ? ind.latest.toFixed(2) : ind.latest}</div>`;
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // 最近形态
+      if ((d.recent_patterns || []).length) {
+        html += '<h3 style="font-size:13px;color:#58a6ff;margin-top:16px">近20日K线形态信号</h3><div style="display:flex;flex-wrap:wrap;gap:6px">';
+        d.recent_patterns.forEach(p => {
+          const c = p.signal === 1 ? '#3fb950' : (p.signal === -1 ? '#f85149' : '#8b949e');
+          html += `<span style="background:#21262d;border-radius:4px;padding:4px 10px;font-size:11px;color:${c}">${p.name}(${p.date})</span>`;
+        });
+        html += '</div>';
+      }
+
+      // 技术图表
+      html += `<div style="margin-top:16px"><img src="/api/chart/${previewCode}?_v=24" style="width:100%;border-radius:8px;border:1px solid #30363d" onerror="this.style.display='none'" /></div>`;
+
+      content.innerHTML = html;
+      content.style.display = '';
+      loading.style.display = 'none';
+    } else {
+      loading.innerHTML = `<div style="color:#f85149">加载失败: ${data.error}</div>`;
+    }
+  } catch(e) {
+    loading.innerHTML = `<div style="color:#f85149">加载失败: ${e.message}</div>`;
+  }
+}
 
 async function loadIndustryStocks() {
   try {

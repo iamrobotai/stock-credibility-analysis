@@ -104,7 +104,7 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
         state.log(f"[{name}] 分段完成", "ok")
 
         # Step 3: D1-D8 评分
-        state.log(f"[{name}] D1-D8 评分...", "info")
+        state.log(f"[{name}] D1-D9 评分...", "info")
         import score_rules as score_mod
         score_mod.run(code)
         scored_path = DATA_DIR / f"{code}_scored.json"
@@ -113,6 +113,19 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
             with open(scored_path, encoding="utf-8") as f:
                 scored_data = json.load(f)
             ad_count = sum(1 for p in scored_data.get("posts", []) if p.get("D8", {}).get("is_ad"))
+            # 添加 D9 技术评分
+            try:
+                raw_path = DATA_DIR / f"{code}_raw.json"
+                raw = json.load(open(raw_path, encoding="utf-8"))
+                kline = raw.get("kline", [])
+                if kline:
+                    from technical import compute_technical_score
+                    d9 = compute_technical_score(kline)
+                    scored_data["D9"] = d9
+                    with open(scored_path, "w", encoding="utf-8") as f:
+                        json.dump(scored_data, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
         state.log(f"[{name}] 评分完成: 广告={ad_count}条", "ok")
 
         # Step 4: LLM 增强
@@ -597,6 +610,58 @@ def api_industry_preview():
             except Exception:
                 continue
         return jsonify({"ok": True, "stocks": stocks})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@app.route("/api/technical/<code>")
+def api_technical(code):
+    """获取技术指标数据"""
+    try:
+        raw_path = DATA_DIR / f"{code}_raw.json"
+        if not raw_path.exists():
+            return jsonify({"ok": False, "error": "无数据"})
+        raw = json.load(open(raw_path, encoding="utf-8"))
+        kline = raw.get("kline", [])
+        if not kline:
+            return jsonify({"ok": False, "error": "无K线数据"})
+        from technical import (
+            compute_macd, compute_kdj, compute_rsi, compute_boll,
+            compute_cci, compute_wr, compute_atr, compute_technical_score,
+            detect_patterns,
+        )
+        closes = [b["close"] for b in kline]
+        highs = [b["high"] for b in kline]
+        lows = [b["low"] for b in kline]
+        volumes = [b.get("volume", 0) for b in kline]
+
+        # 趋势 (最近50根K线)
+        tail = min(100, len(kline))
+        kline_tail = kline[-tail:]
+        closes_tail = closes[-tail:]
+
+        indicators = {
+            "MACD": compute_macd(closes_tail),
+            "KDJ": compute_kdj(highs[-tail:], lows[-tail:], closes_tail),
+            "RSI": compute_rsi(closes_tail),
+            "BOLL": compute_boll(closes_tail),
+            "CCI": compute_cci(highs[-tail:], lows[-tail:], closes_tail) if len(closes_tail) >= 14 else None,
+            "WR": compute_wr(highs[-tail:], lows[-tail:], closes_tail) if len(closes_tail) >= 10 else None,
+            "ATR": compute_atr(highs[-tail:], lows[-tail:], closes_tail) if len(closes_tail) >= 14 else None,
+        }
+        patterns = detect_patterns(kline_tail)
+        recent_patterns = [p for p in patterns if p["index"] >= len(kline_tail) - 20]
+        d9 = compute_technical_score(kline_tail)
+
+        return jsonify({
+            "ok": True,
+            "data": {
+                "indicators": indicators,
+                "patterns_total": len(patterns),
+                "recent_patterns": recent_patterns[-15:],
+                "d9_score": d9,
+            }
+        })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)[:200]})
 
