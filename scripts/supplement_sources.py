@@ -26,6 +26,12 @@ import akshare as ak
 # 需要补充的高价值源 (核心 kline/news/reports/financials 不在此列)
 SUPPLEMENT = ["cninfo", "ir", "ths", "sina_fund", "lhb", "comment", "xueqiu"]
 
+# 受登录/反爬限制的社交源：仅 --login 模式补（依赖浏览器登录态 cookie）
+SOCIAL_SOURCES = ["xueqiu_posts", "zhihu", "taoguba"]
+
+# --login 完整补采集合
+SUPPLEMENT_ALL = SUPPLEMENT + SOCIAL_SOURCES
+
 from datetime import timedelta
 
 # comment 全市场缓存
@@ -91,6 +97,10 @@ COLLECTORS = {
     "lhb":       lambda code, name: _get_lhb_rows(code),
     "comment":   lambda code, name: _get_comment_row(code),
     "xueqiu":    lambda code, name: dc.collect_xueqiu(code),
+    # 社交源（浏览器登录爬取，依赖缓存 cookie；未登录则提示）
+    "xueqiu_posts": lambda code, name: dc.collect_xueqiu_posts(code, name),
+    "zhihu":     lambda code, name: dc.collect_zhihu(code, name),
+    "taoguba":   lambda code, name: dc.collect_taoguba(code, name),
 }
 
 # 时效性源: --refresh 模式下重采并合并新增 (去重)
@@ -178,6 +188,7 @@ def main():
     only = None
     codes = None
     refresh = False
+    login = False
     i = 0
     while i < len(args):
         if args[i] == "--only" and i+1 < len(args):
@@ -185,6 +196,9 @@ def main():
             i += 2
         elif args[i] == "--refresh":
             refresh = True
+            i += 1
+        elif args[i] == "--login":
+            login = True
             i += 1
         else:
             codes = codes or []
@@ -197,8 +211,8 @@ def main():
         files = sorted(glob.glob(os.path.join(DATA, "*_raw.json")))
 
     total = len(files)
-    mode = "增量刷新(refresh)" if refresh else "补空缺(fill)"
-    src_list = only or (REFRESH_SRC if refresh else SUPPLEMENT)
+    mode = "增量刷新(refresh)" if refresh else ("登录补采(login)" if login else "补空缺(fill)")
+    src_list = only or (REFRESH_SRC if refresh else (SUPPLEMENT_ALL if login else SUPPLEMENT))
     print(f"待处理: {total} 只 | 模式: {mode} | 源: {src_list}\n")
     done = 0; touched = 0
     t0 = time.time()

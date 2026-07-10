@@ -242,7 +242,8 @@ stock-credibility-analysis/
 │   ├── stock_resolver.py       # 股票代码自动解析
 │   ├── data_collector.py       # 15 平台数据采集器 (含雪球讨论帖/知乎)
 │   ├── collectors.py           # 扩展平台采集器
-│   ├── browser_fetcher.py      # 浏览器抓取模块 (Playwright, 雪球/知乎)
+│   ├── browser_login.py       # 本地浏览器+人机协同登录爬取 (雪球/知乎/淘股吧, 优先复用系统Chrome)
+│   ├── browser_fetcher.py      # 旧版浏览器抓取模块 (已弃用, 保留兼容)
 │   ├── incremental_manager.py  # 增量更新管理器
 │   ├── segment.py              # 摆荡腿价格分段算法
 │   ├── score_rules.py          # D1-D8 规则评分引擎

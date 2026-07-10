@@ -1,0 +1,18 @@
+# 股票量化三维分析系统 — 运行依赖
+# 核心 Web
+flask>=3.0
+# 数据处理（量化子系统零重依赖，仅用 pandas/numpy）
+pandas>=2.0
+numpy>=1.24
+# 数据采集
+requests>=2.31
+akshare>=1.18            # 行情/北向/两融/股东/解禁/大宗（M3.1）
+# 图表 / 文档导出
+matplotlib>=3.7          # 价格曲线 PNG
+python-docx>=1.1         # Word 报告导出（M6）
+openpyxl>=3.1            # Excel 导出
+# 浏览器登录采集（受限社交源，可选）
+playwright>=1.40
+# 生产服务器（二选一）
+waitress>=3.0            # Windows
+gunicorn>=21.0 ; platform_system != "Windows"   # Linux

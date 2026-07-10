@@ -35,13 +35,19 @@ PLATFORM_REGISTRY = {
     "ths":           {"label": "同花顺(千股千评)", "category": "high",     "value": "medium", "desc": "千股千评/财务指标/公司亮点"},
     "sina_fund":     {"label": "新浪资金流向",     "category": "high",     "value": "medium", "desc": "主力净流入/大单/超大单"},
     "lhb":           {"label": "东财龙虎榜",       "category": "high",     "value": "medium", "desc": "近3月龙虎榜明细"},
-    "xueqiu":        {"label": "雪球(基本面)",     "category": "high",     "value": "medium", "desc": "雪球个股基本面信息"},
-    "xueqiu_posts":  {"label": "雪球(讨论帖)",     "category": "high",     "value": "medium", "desc": "雪球社区讨论帖，需浏览器抓取", "browser": True},
-    "zhihu":         {"label": "知乎(讨论)",       "category": "high",     "value": "medium", "desc": "知乎相关问答与文章，需浏览器抓取", "browser": True},
+    "xueqiu":        {"label": "雪球(基本面)",     "category": "high",     "value": "medium", "desc": "雪球个股基本面信息，需登录爬取", "browser": True},
+    "xueqiu_posts":  {"label": "雪球(讨论帖)",     "category": "high",     "value": "medium", "desc": "雪球社区讨论帖，需浏览器登录抓取", "browser": True},
+    "zhihu":         {"label": "知乎(讨论)",       "category": "high",     "value": "medium", "desc": "知乎相关问答与文章，需浏览器登录抓取", "browser": True},
     "comment":       {"label": "东财评论",         "category": "high",     "value": "medium", "desc": "市场情绪指标/综合评价"},
     # 情绪 (可选，默认启用但带过滤)
     "guba":          {"label": "东财股吧",         "category": "emotional","value": "low",    "desc": "散户讨论帖，情绪化较多"},
-    "taoguba":       {"label": "淘股吧",           "category": "emotional","value": "low",    "desc": "短线情绪/技术分析帖"},
+    "taoguba":       {"label": "淘股吧",           "category": "emotional","value": "low",    "desc": "短线情绪/技术分析帖，需浏览器登录抓取", "browser": True},
+    # 数据维度 (M3.1: 北向/两融/股东/解禁/大宗) — 依赖网络, 缺失优雅降级
+    "north_fund":    {"label": "北向资金(沪深港通)","category": "high",     "value": "high",   "desc": "北向持股数/比例/市值及 1/5/10 日变化"},
+    "margin":        {"label": "融资融券",         "category": "high",     "value": "medium", "desc": "融资余额/融券余额(杠杆资金方向)"},
+    "holder_num":    {"label": "股东户数",         "category": "high",     "value": "medium", "desc": "股东户数变化(筹码集中度)"},
+    "unlock":        {"label": "限售解禁",         "category": "high",     "value": "low",    "desc": "未来解禁规模与占比"},
+    "block_trade":   {"label": "大宗交易",         "category": "high",     "value": "low",    "desc": "大宗交易折溢价与买卖席位"},
 }
 
 # 默认启用的平台 (核心+高价值+情绪)
@@ -310,9 +316,24 @@ def collect_lhb(code):
 
 
 def collect_xueqiu(code):
-    """雪球 — 个股基本面"""
+    """雪球 — 个股基本面（登录态 cookie 复用优先，akshare 兜底）"""
     sym = f"SH{code}" if code.startswith("6") else f"SZ{code}"
     xq_url = f"https://xueqiu.com/S/{sym}"
+    # 优先：浏览器登录爬取（带 cookie 调官方 quote 接口，最稳）
+    try:
+        from browser_login import load_cookies, scrape_xueqiu_fundamentals, is_available
+        if is_available():
+            ck = load_cookies("xueqiu")
+            if ck:
+                fund = scrape_xueqiu_fundamentals(ck, code)
+                if fund:
+                    fund["url"] = xq_url
+                    return [fund]
+                else:
+                    print("  [xueqiu] 已登录cookie但无数据，请运行 login_and_scrape.py 重新登录")
+    except Exception as e:
+        print(f"  [xueqiu] 登录爬取失败: {e}")
+    # 兜底：akshare
     try:
         df = ak.stock_individual_basic_info_xq(symbol=sym)
         records = df.to_dict("records")
@@ -340,9 +361,15 @@ def collect_xueqiu_posts(code, name="", use_browser=True, incremental=False):
 
     if use_browser:
         try:
-            from browser_fetcher import fetch_xueqiu_posts, is_available
+            from browser_login import load_cookies, scrape_xueqiu_posts, is_available
             if is_available():
-                posts = fetch_xueqiu_posts(code, max_count=30, headless=True)
+                ck = load_cookies("xueqiu")
+                if ck:
+                    posts = scrape_xueqiu_posts(ck, code, max_count=30)
+                    if not posts:
+                        print("  [xueqiu_posts] 已登录cookie无数据，请运行 login_and_scrape.py 重新登录")
+                else:
+                    print("  [xueqiu_posts] 无登录cookie，请先运行 login_and_scrape.py 完成雪球登录")
             else:
                 print("  [xueqiu_posts] Playwright 未安装，尝试 API 抓取")
         except ImportError:
@@ -424,9 +451,18 @@ def collect_zhihu(code, name="", use_browser=True, incremental=False):
 
     if use_browser:
         try:
-            from browser_fetcher import fetch_zhihu_search, is_available
+            from browser_login import (load_cookies, BrowserSession,
+                                       inject_cookies, scrape_zhihu, is_available)
             if is_available():
-                results = fetch_zhihu_search(keyword, max_count=20, headless=True)
+                ck = load_cookies("zhihu")
+                if ck:
+                    with BrowserSession("zhihu", headless=True) as (ctx, page):
+                        inject_cookies(ctx, ck)
+                        results = scrape_zhihu(page, keyword, max_count=20)
+                    if not results:
+                        print("  [zhihu] 已登录cookie无数据，请运行 login_and_scrape.py 重新登录")
+                else:
+                    print("  [zhihu] 无登录cookie，请先运行 login_and_scrape.py 完成知乎登录")
             else:
                 print("  [zhihu] Playwright 未安装，尝试 API 抓取")
         except ImportError:
@@ -549,8 +585,23 @@ def collect_guba(code, pages=3):
 
 
 def collect_taoguba(code, name="", limit=15):
-    """淘股吧 — 短线情绪/技术分析帖"""
+    """淘股吧 — 短线情绪/技术分析帖（浏览器爬取优先，requests 兜底）"""
     keyword = name if name else code
+    # 优先：浏览器爬取（更抗反爬；已登录则复用 cookie）
+    try:
+        from browser_login import (load_cookies, BrowserSession,
+                                   inject_cookies, scrape_taoguba, is_available)
+        if is_available():
+            ck = load_cookies("taoguba")
+            if ck:  # 仅在曾登录过时才开浏览器，避免逐股无谓开销
+                with BrowserSession("taoguba", headless=True) as (ctx, page):
+                    inject_cookies(ctx, ck)
+                    items = scrape_taoguba(page, keyword, max_count=limit)
+                    if items:
+                        return items
+    except Exception as e:
+        print(f"  [taoguba] 浏览器爬取失败: {e}")
+    # 兜底：requests
     url = f"https://www.taoguba.com.cn/search?keyword={keyword}"
     try:
         resp = _retry(lambda: requests.get(url, headers={"User-Agent": UA}, timeout=10))
@@ -569,6 +620,166 @@ def collect_taoguba(code, name="", limit=15):
     except Exception:
         return []
 
+
+# ============================================================
+# M3.1 数据维度采集 (北向 / 两融 / 股东户数 / 解禁 / 大宗)
+# 说明: 全部依赖 akshare 实时接口, 网络缺失或损坏时返回
+#       {"available": False, "reason": ...} 的结构化空值, 不影响既有流水线。
+# ============================================================
+
+def _empty(kind: str, reason: str = "") -> dict:
+    """新维度采集的统一空值结构。"""
+    return {"available": False, "kind": kind,
+            "reason": (reason or "无数据 / 接口异常")[:120]}
+
+def _num(x):
+    if x is None:
+        return float("nan")
+    if isinstance(x, (int, float)):
+        return float(x)
+    s = str(x).strip().replace(",", "").replace("%", "").replace("亿", "")
+    if s in ("", "-", "--", "None", "nan", "NaN"):
+        return float("nan")
+    try:
+        return float(s)
+    except Exception:
+        return float("nan")
+
+def collect_north_fund(code):
+    """北向资金(沪深港通个股持股) — 单股。
+
+    接口: ak.stock_hsgt_individual_detail_em(symbol="沪股通"/"深股通")
+    解析: 按股票代码过滤, 取最新一行, 提取持股数/比例/市值及 1/5/10 日变化。
+    """
+    try:
+        sym = "沪股通" if str(code).startswith("6") else "深股通"
+        df = ak.stock_hsgt_individual_detail_em(symbol=sym)
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return _empty("north_fund", "北向明细为空")
+        col = ("股票代码" if "股票代码" in getattr(df, "columns", [])
+                else ("代码" if "代码" in getattr(df, "columns", []) else None))
+        if col is None:
+            return _empty("north_fund", "北向明细无代码列")
+        df = df[df[col].astype(str).str.contains(str(code))]
+        if df.empty:
+            return _empty("north_fund", "该股本向无持仓/未上榜")
+        r = df.iloc[-1].to_dict()
+        def g(*cands):
+            for c in cands:
+                if c in r and r[c] not in (None, ""):
+                    return r[c]
+            return None
+        return {
+            "available": True,
+            "hold_shares": _num(g("持股数", "持股数量")),
+            "hold_pct": _num(g("持股比例", "持股占流通股比")),
+            "hold_market_cap": _num(g("持股市值", "持股市值(元)")),
+            "chg_1d_shares": _num(g("持股数变化-1日", "持股变动")),
+            "chg_1d_pct": _num(g("持股比例变化-1日")),
+            "chg_5d_pct": _num(g("持股比例变化-5日")),
+            "chg_10d_pct": _num(g("持股比例变化-10日")),
+            "as_of": str(g("日期", "持股日期", "交易日期") or ""),
+        }
+    except Exception as e:
+        return _empty("north_fund", str(e)[:80])
+
+def collect_margin(code):
+    """融资融券(单股) — 沪市 stock_margin_detail_sse / 深市 stock_margin_detail_szse。
+
+    解析: 取最新一行, 融资买入额/融资余额/融券卖出量/融券余额。
+    """
+    try:
+        fn = (ak.stock_margin_detail_sse if str(code).startswith("6")
+              else ak.stock_margin_detail_szse)
+        df = fn(symbol=code)
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return _empty("margin", "两融明细为空")
+        r = df.iloc[-1].to_dict()
+        def g(*cands):
+            for c in cands:
+                if c in r and r[c] not in (None, ""):
+                    return r[c]
+            return None
+        return {
+            "available": True,
+            "fin_buy": _num(g("融资买入额", "融资买入量")),
+            "fin_balance": _num(g("融资余额")),
+            "fin_balance_chg": _num(g("融资余额变化", "融资偿还额")),
+            "sec_sell": _num(g("融券卖出量", "融券卖出额")),
+            "sec_balance": _num(g("融券余额")),
+            "as_of": str(g("日期", "交易日期") or ""),
+        }
+    except Exception as e:
+        return _empty("margin", str(e)[:80])
+
+def collect_holder_num(code):
+    """股东户数(单股) — ak.stock_zh_a_gdhs。
+
+    解析: 取最新一行, 股东户数 / 截止日期 / 较上期变化(户) / 变动比例(%)。
+    """
+    try:
+        df = ak.stock_zh_a_gdhs(symbol=code)
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return _empty("holder_num", "股东户数数据为空")
+        r = df.iloc[-1].to_dict()
+        def g(*cands):
+            for c in cands:
+                if c in r and r[c] not in (None, ""):
+                    return r[c]
+            return None
+        return {
+            "available": True,
+            "holder_count": _num(g("股东户数", "股东总数")),
+            "date": str(g("截止日期", "日期") or ""),
+            "change_holders": _num(g("较上期变化(户)", "股东户数-变化")),
+            "change_pct": _num(g("变动比例(%)", "股东户数-变化比例")),
+            "price": _num(g("股东户数-股价(元)")),
+        }
+    except Exception as e:
+        return _empty("holder_num", str(e)[:80])
+
+def collect_unlock(code):
+    """限售解禁(单股) — ak.stock_restricted_release_detail_em(symbol="SH"/"SZ"+code)。"""
+    try:
+        prefix = "SH" if str(code).startswith("6") else "SZ"
+        df = ak.stock_restricted_release_detail_em(symbol=f"{prefix}{code}")
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return _empty("unlock", "无解禁数据")
+        out = []
+        for r in df.to_dict("records")[:10]:
+            out.append({
+                "date": str(r.get("解禁日期", r.get("上市日", "")) or ""),
+                "shares": _num(r.get("解禁数量", r.get("解禁股数"))),
+                "market_cap": _num(r.get("解禁市值")),
+                "pct": _num(r.get("解禁占比", r.get("占流通股比"))),
+            })
+        return {"available": True, "items": out}
+    except Exception as e:
+        return _empty("unlock", str(e)[:80])
+
+def collect_block_trade(code):
+    """大宗交易(单股) — ak.stock_dzjy_mrmx(symbol=code)。
+
+    解析: 取近 15 笔, 成交日期/价/量/额/折溢价率/买卖方营业部。
+    """
+    try:
+        df = ak.stock_dzjy_mrmx(symbol=code)
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return _empty("block_trade", "无大宗交易")
+        out = []
+        for r in df.to_dict("records")[:15]:
+            out.append({
+                "date": str(r.get("成交日期", r.get("日期", "")) or ""),
+                "price": _num(r.get("成交价")),
+                "volume": _num(r.get("成交量", r.get("成交数量"))),
+                "amount": _num(r.get("成交额")),
+                "premium": _num(r.get("溢价率", r.get("折溢价率"))),
+                "buyer": str(r.get("买方营业部", r.get("买方", "")) or ""),
+                "seller": str(r.get("卖方营业部", r.get("卖方", "")) or ""),
+            })
+        return {"available": True, "items": out}
+    except Exception as e:
+        return _empty("block_trade", str(e)[:80])
 
 # ============================================================
 # 主采集函数
@@ -634,6 +845,12 @@ def collect(code, name="", outdir="data", platforms=None, filter_emotion=True,
         ("comment",       lambda: collect_comment(code)),
         ("guba",          lambda: collect_guba(code)),
         ("taoguba",       lambda: collect_taoguba(code, name)),
+        # M3.1 数据维度
+        ("north_fund",    lambda: collect_north_fund(code)),
+        ("margin",        lambda: collect_margin(code)),
+        ("holder_num",    lambda: collect_holder_num(code)),
+        ("unlock",        lambda: collect_unlock(code)),
+        ("block_trade",   lambda: collect_block_trade(code)),
     ]
 
     for key, fn in all_sources:
