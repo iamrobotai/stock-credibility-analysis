@@ -1,0 +1,65 @@
+name: Build Android APK
+
+# 触发：① 推送到 main 自动构建；② 手动在 Actions 页面点「Run workflow」
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 允许把构建产物（APK）作为 Artifact 上传
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build APK (buildozer / python-for-android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120   # 首次会下载 SDK/NDK（数 GB）+ 编译，给足时间
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install system dependencies (Java + build tools)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            git zip unzip openjdk-17-jdk python3-pip \
+            autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
+            libffi-dev libssl-dev ccache
+          # 导出 JAVA_HOME 供 buildozer 使用
+          _jvm="$(dirname $(dirname $(readlink -f $(which java))))"
+          echo "JAVA_HOME=$_jvm" >> "$GITHUB_ENV"
+          echo "$_jvm/bin" >> "$GITHUB_PATH"
+
+      - name: Install buildozer (pin cython<3, 否则 p4a 报错)
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install "cython<3.0" buildozer
+
+      - name: Build debug APK
+        working-directory: android
+        env:
+          # 自动接受 Android SDK license 交互提示
+          CI: "true"
+        run: |
+          yes | buildozer android debug 2>&1 | tee /tmp/buildozer.log
+
+      - name: Upload APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-credibility-apk
+          path: android/bin/*.apk
+          if-no-files-found: warn
+
+      - name: On failure, surface build log
+        if: failure()
+        run: |
+          echo "==== buildozer.log (tail) ===="
+          tail -60 /tmp/buildozer.log || true

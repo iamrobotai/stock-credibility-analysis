@@ -7,7 +7,9 @@
 
 > ⚠️ **Windows 本机无法直出 APK**。Buildozer 必须在 **Linux 或 WSL（Ubuntu）** 中运行，并安装 Android SDK + NDK。
 >
-> 🔒 **本仓库所在的这台 Windows 主机当前没有管理员权限**（`net session` → 无权限），因此连 WSL 都无法在此安装——**本机不可能产出真实 `.apk`**。不要伪造 apk。正确路径：在你**有管理员权限**的 Windows 上运行 `android/setup_and_build_apk.ps1` 一步出包（见第 0 节）。
+> ✅ **【首选 · 无需本地管理员】GitHub Actions 云端构建**：本仓库已配置 `.github/workflows/build-apk.yml`。**推送到 `main` 即自动触发**，或到仓库 Actions 页面手动 `Run workflow`，构建完在 Artifacts 直接下载 `stock-credibility-apk`（`android/bin/*.apk`）。CI 跑在 Linux 云端，自带 buildozer/Java/NDK，**完全绕开本机无管理员/WSL 的限制**。详见文末「§ 云端 CI 构建」。
+>
+> 🔒 **本仓库所在的这台 Windows 主机当前没有管理员权限**（`net session` → 无权限），因此连 WSL 都无法在此安装——**本机不可能产出真实 `.apk`**。不要伪造 apk。备选：在你**有管理员权限**的 Windows 上运行 `android/setup_and_build_apk.ps1` 一步出包（见第 0 节）。
 
 ## 0. 一步出包（需 Windows 管理员，一次性）
 
@@ -65,6 +67,17 @@ buildozer android debug      # 产出 bin/股票可信度分析系统-1.0.0-debu
 buildozer android release
 ```
 `buildozer.spec` 已配置：`source.dir = ../..` 含 `app.py / core / quant / templates / static / configs` 等；依赖含 `flask / pandas / numpy / akshare`；权限 `INTERNET` 等。
+
+## 3.1 云端 CI 构建（推荐 · 无需本地管理员）
+
+仓库已包含 `.github/workflows/build-apk.yml`，利用 **GitHub Actions 的 Linux 云端** 自动构建 APK——
+
+- **触发**：① 任意推送到 `main` 自动构建；② 到仓库 **Actions** 页面手动 `Run workflow`。
+- **环境**：`ubuntu-latest` + OpenJDK 17 + `buildozer`（已 pin `cython<3`），首次自动下载 Android SDK/NDK（数 GB）。
+- **产物**：构建完在运行记录的 **Artifacts** 里下载 `stock-credibility-apk`（`android/bin/*.apk`）。
+- **排障**：构建失败时工作流会把 `buildozer.log` 末尾贴到日志，便于定位缺失的 p4a recipe（如 akshare 链过重时个别依赖需补 recipe 或钉版本）。
+
+> 此路径**完全绕开本机无管理员/WSL 的限制**，是获取真实 `.apk` 的最省事方式。
 
 ## 4. 安装到设备
 ```bash

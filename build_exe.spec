@@ -34,12 +34,17 @@ project_dir = SPEC_DIR
 
 block_cipher = None
 
-# ---- 本地子包全量收集 ----
+# ---- 本地子包收集 ----
+# 重要（修复 exe 内「No module named 'hot_stocks'」等裸导入失败）：
+#   core/ai/export/scripts 这 4 个目录【没有 __init__.py】，源码里是当作
+#   「扁平模块目录」靠 sys.path 注入使用的（裸导入 `from hot_stocks import`）。
+#   collect_submodules 会把它们收成 `core.hot_stocks` 这种带前缀名塞进 PYZ，
+#   而代码要的是裸名 `hot_stocks` —— 故 frozen 下裸导入全部失败。
+#   修复：这 4 个目录改为 datas 实体解压（见下方 datas），运行时 sys.path
+#   注入会自动把它们加进来，行为与源码完全一致（裸导入 + 命名空间包前缀导入都解析得到）。
+#   quant/services/common/annotation 有 __init__.py，继续用 collect_submodules。
 hiddenimports = (
-    collect_submodules("core")
-    + collect_submodules("quant")
-    + collect_submodules("ai")
-    + collect_submodules("export")
+    collect_submodules("quant")
     + collect_submodules("services")
     + collect_submodules("common")
     + collect_submodules("annotation")
@@ -66,6 +71,12 @@ a = Analysis(
         (os.path.join(project_dir, "templates"), "templates"),
         (os.path.join(project_dir, "static"), "static"),
         (os.path.join(project_dir, "configs"), "configs"),
+        # 4 个「扁平模块目录」（无 __init__.py）：以实体文件解压，
+        # 使 frozen 模式 sys.path 注入生效，裸导入 `from hot_stocks import` 等可解析。
+        (os.path.join(project_dir, "core"), "core"),
+        (os.path.join(project_dir, "ai"), "ai"),
+        (os.path.join(project_dir, "export"), "export"),
+        (os.path.join(project_dir, "scripts"), "scripts"),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],
