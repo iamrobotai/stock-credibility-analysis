@@ -2,14 +2,10 @@
 # ============================================================================
 #  build_apk_wsl.sh  —  在 WSL (Ubuntu) 内无人值守构建 Android APK
 # ============================================================================
-#  前置条件（需你本人在 Windows 侧用管理员 PowerShell 完成，本脚本无法替代）：
-#    1) 管理员 PowerShell 执行：  wsl --install -d Ubuntu
-#    2) 重启电脑（启用 WSL2 虚拟机平台必须重启一次）
-#    3) 首次启动 Ubuntu 完成 UNIX 用户初始化（一次性交互，之后不再需要）
-#    4) 把本文件与项目一起放进 WSL 可见路径（本项目已在 /mnt/c/... 下可见）
-#
-#  本脚本在 WSL 内运行：  bash build_apk_wsl.sh
-#  产物：android/bin/*-debug.apk
+#  本脚本由总脚本 setup_and_build_apk.ps1 在「重启登录后」以 root 自动调用，
+#  亦支持手动在 WSL 内运行：  wsl -d Ubuntu -u root bash -c 'bash /mnt/c/.../android/build_apk_wsl.sh'
+#  前置（已由总脚本完成）：WSL2 + Ubuntu 已装、项目在 /mnt/c/... 下可见。
+#  产物：android/bin/*-debug.apk（构建日志同时写到 android/build_log_*.txt）
 # ============================================================================
 
 set -euo pipefail
@@ -20,7 +16,9 @@ if ! echo "$UNAME" | grep -qi "microsoft\|linux"; then
   echo "错误：本脚本必须在 WSL / Linux 中运行（当前: $UNAME）" >&2
   exit 1
 fi
-command -v sudo >/dev/null || { echo "需要 sudo，请先完成 Ubuntu 用户初始化" >&2; exit 1; }
+# root 直跑则无需 sudo；普通用户需 sudo（总脚本以 root 调用，故通常跳过）
+if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
+command -v sudo >/dev/null || { [ "$(id -u)" -eq 0 ] || { echo "需要 sudo，请先完成 Ubuntu 用户初始化" >&2; exit 1; }; }
 
 # ---- 定位项目根目录（WSL 挂载 Windows 盘为 /mnt/c） ----
 PROJECT=""
@@ -38,8 +36,8 @@ PROJECT="$(cd "$PROJECT" && pwd)"
 echo "     项目根目录 = $PROJECT"
 
 echo "==> [1/6] 安装系统依赖 (JDK17 / 构建工具)"
-sudo apt-get update -y
-sudo apt-get install -y --no-install-recommends \
+$SUDO apt-get update -y
+$SUDO apt-get install -y --no-install-recommends \
   git zip unzip openjdk-17-jdk python3-venv python3-pip \
   autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
   libffi-dev libssl-dev ccache
@@ -71,7 +69,12 @@ ls -l buildozer.spec
 
 echo "==> [5/6] 构建 debug APK（首次会下载 SDK/NDK 数 GB，请耐心等待 20~40 分钟）"
 # yes | 自动接受 SDK license 交互提示
-yes | buildozer android debug 2>&1 | tee /tmp/buildozer_$(date +%Y%m%d_%H%M).log
+LOGTMP="/tmp/buildozer_$(date +%Y%m%d_%H%M).log"
+LOGWIN="$PROJECT/android/build_log_$(date +%Y%m%d_%H%M).txt"
+yes | buildozer android debug 2>&1 | tee "$LOGTMP"
+# 同步日志到 Windows 侧，便于重启后不进 WSL 也能查看进度
+cp "$LOGTMP" "$LOGWIN" 2>/dev/null || true
+echo "    构建日志（Windows 侧）： $LOGWIN"
 
 echo "==> [6/6] 完成，查找产物 APK"
 APK="$(ls -1 "$PROJECT/android/bin"/*.apk 2>/dev/null | head -1 || true)"

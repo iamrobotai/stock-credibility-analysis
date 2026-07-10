@@ -7,20 +7,26 @@
 
 > ⚠️ **Windows 本机无法直出 APK**。Buildozer 必须在 **Linux 或 WSL（Ubuntu）** 中运行，并安装 Android SDK + NDK。
 >
-> 🔒 **本仓库所在的这台 Windows 主机当前没有管理员权限**（`net session` → 无权限），因此连 WSL 都无法在此安装——**本机不可能产出真实 `.apk`**。不要伪造 apk。正确路径：在你**有管理员权限**的 Windows 上装好 WSL（见第 0 节），随后一条命令即可出包（见第 3 节 `build_apk_wsl.sh`）。
+> 🔒 **本仓库所在的这台 Windows 主机当前没有管理员权限**（`net session` → 无权限），因此连 WSL 都无法在此安装——**本机不可能产出真实 `.apk`**。不要伪造 apk。正确路径：在你**有管理员权限**的 Windows 上运行 `android/setup_and_build_apk.ps1` 一步出包（见第 0 节）。
 
-## 0. 本机前置（需 Windows 管理员，一次性）
+## 0. 一步出包（需 Windows 管理员，一次性）
 
-本脚本与项目无法替代以下 Windows 侧操作（需要管理员 PowerShell）：
+把「装 WSL」与「WSL 内构建」合并为**一份只需粘贴一次的总脚本** `android/setup_and_build_apk.ps1`：
 
 ```powershell
-# ① 管理员 PowerShell 安装 WSL + Ubuntu
-wsl --install -d Ubuntu
-# ② 按提示【重启电脑】一次（启用 WSL2 虚拟机平台必须重启）
-# ③ 重启后首次启动 Ubuntu，完成 UNIX 用户初始化（仅此一次交互）
+# 以管理员身份运行（右键「以管理员身份运行」，或脚本会自动请求提权）
+# 路径：android/setup_and_build_apk.ps1
 ```
 
-重启并初始化完成后，本项目在 WSL 中已可直接访问：`/mnt/c/Users/outzb/WorkBuddy/Claw/stock-credibility-analysis`。
+它自动完成：① 自提权 → ② 启用 WSL2 + 虚拟机平台 → ③ `wsl --install -d Ubuntu --no-launch` →
+④ 写入任务启动器 `run_build_task.ps1` → ⑤ 注册「登录后自动构建」计划任务 → ⑥ 重启。
+
+**重启并登录后**：计划任务自动以 `root` 进 WSL 执行 `build_apk_wsl.sh`，全程零交互；
+产物落在 `android/bin/*.apk`，构建日志同步到 `android/build_log_*.txt`（Windows 侧直接可见）。
+
+> 💡 若你的 Windows 版本不支持 `--no-launch`，首次 `wsl` 启动会要求输入 UNIX 用户名/密码一次；
+> 输入任意值后，后续构建自动进行。失败重试（免重启）：
+> `wsl -d Ubuntu -u root bash -c 'bash /mnt/c/Users/outzb/WorkBuddy/Claw/stock-credibility-analysis/android/build_apk_wsl.sh'`
 
 ## 1. 准备 WSL 环境（Ubuntu 22.04）
 ```bash
@@ -38,6 +44,8 @@ export ANDROID_HOME=$HOME/Android/Sdk
 ```
 
 ## 3. 构建
+
+> ⚡ 最简路径：在**有管理员权限**的 Windows 上直接运行 `android/setup_and_build_apk.ps1`（见第 0 节），无需手动进 WSL。下面 A/B 为手动 / WSL 内备选。
 
 ### 方案 A（推荐，无人值守一条命令）
 进入 `android/` 直接运行本仓库附带的脚本，它会自动装依赖、建 venv、装 buildozer、首次自动下载 SDK/NDK 并执行构建：
