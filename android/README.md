@@ -5,7 +5,22 @@
 
 > 📌 **本 APK 加载的就是「合并版单页」**：桌面端已将主仪表盘（可信度分析）与量化分析页合并为 `templates/dashboard.html`，并由 `app.py` 的 `/` 路由渲染。因此移动端 WebView 打开即同时看到**可信度分析 + 量化回测/资金/综合可信度融合**两个分析，不再分 URL。
 
-> ⚠️ **Windows 本机无法直出 APK**。Buildozer 必须在 **Linux 或 WSL（Ubuntu）** 中运行，并安装 Android SDK + NDK。以下步骤在 WSL 中执行。
+> ⚠️ **Windows 本机无法直出 APK**。Buildozer 必须在 **Linux 或 WSL（Ubuntu）** 中运行，并安装 Android SDK + NDK。
+>
+> 🔒 **本仓库所在的这台 Windows 主机当前没有管理员权限**（`net session` → 无权限），因此连 WSL 都无法在此安装——**本机不可能产出真实 `.apk`**。不要伪造 apk。正确路径：在你**有管理员权限**的 Windows 上装好 WSL（见第 0 节），随后一条命令即可出包（见第 3 节 `build_apk_wsl.sh`）。
+
+## 0. 本机前置（需 Windows 管理员，一次性）
+
+本脚本与项目无法替代以下 Windows 侧操作（需要管理员 PowerShell）：
+
+```powershell
+# ① 管理员 PowerShell 安装 WSL + Ubuntu
+wsl --install -d Ubuntu
+# ② 按提示【重启电脑】一次（启用 WSL2 虚拟机平台必须重启）
+# ③ 重启后首次启动 Ubuntu，完成 UNIX 用户初始化（仅此一次交互）
+```
+
+重启并初始化完成后，本项目在 WSL 中已可直接访问：`/mnt/c/Users/outzb/WorkBuddy/Claw/stock-credibility-analysis`。
 
 ## 1. 准备 WSL 环境（Ubuntu 22.04）
 ```bash
@@ -23,6 +38,16 @@ export ANDROID_HOME=$HOME/Android/Sdk
 ```
 
 ## 3. 构建
+
+### 方案 A（推荐，无人值守一条命令）
+进入 `android/` 直接运行本仓库附带的脚本，它会自动装依赖、建 venv、装 buildozer、首次自动下载 SDK/NDK 并执行构建：
+```bash
+cd /mnt/c/Users/outzb/WorkBuddy/Claw/stock-credibility-analysis/android
+bash build_apk_wsl.sh
+# 产物：android/bin/*-debug.apk
+```
+
+### 方案 B（手动分步）
 将**整个项目**（含本 `android/` 目录）拷入 WSL，进入 `android/` 执行：
 ```bash
 cd /path/to/stock-credibility-analysis/android
