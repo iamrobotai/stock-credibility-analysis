@@ -69,7 +69,9 @@ EMOTION_KEEP_KW = [
 ]
 
 
-def _retry(fn, tries=3, delay=1.5):
+def _retry(fn, tries=2, delay=1.0):
+    """网络调用重试。tries=2 + delay=1.0：单源故障时快速失败，
+    避免整批任务因某个慢/挂源长时间阻塞（原 3/1.5 最坏 ~34s/源）。"""
     for i in range(tries):
         try:
             return fn()
@@ -78,6 +80,25 @@ def _retry(fn, tries=3, delay=1.5):
                 raise
             time.sleep(delay * (i + 1))
     return None
+
+
+def probe_sources():
+    """快速探测主要数据源可达性（4s 短超时），返回可读状态列表。
+    用于批量任务启动时诊断「网络超时」真实原因，而非笼统报错。"""
+    probes = [
+        ("东财push2", "https://82.push2.eastmoney.com/api/qt/clist/get?pn=1&pz=1&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m:0+t:6&fields=f12"),
+        ("新浪行情", "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=1&num=1&sort=changepercent&asc=0&node=hs_a"),
+        ("雪球", "https://xueqiu.com/"),
+        ("股吧", "https://guba.eastmoney.com/"),
+    ]
+    out = []
+    for name, url in probes:
+        try:
+            r = requests.get(url, headers={"User-Agent": UA}, timeout=4)
+            out.append(f"{name}: {'✅可达' if r.status_code == 200 else '⚠️HTTP ' + str(r.status_code)}")
+        except Exception as e:
+            out.append(f"{name}: ❌不可达 ({type(e).__name__})")
+    return out
 
 
 def _filter_emotional_posts(posts, keep_threshold=1):

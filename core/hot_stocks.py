@@ -10,7 +10,7 @@ hot_stocks.py — 实时热门股票与行业推荐
   2. 热门行业板块 (涨幅排行 + 主力净流入排行)
   3. 热门概念板块 (涨幅排行)
 """
-import time, requests, json
+import os, time, json, tempfile, requests
 from datetime import datetime
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -19,7 +19,32 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 _PUSH2_NODES = ["82.push2", "48.push2", "18.push2", "56.push2", "push2"]
 
 _cache = {}
-_CACHE_TTL = 120  # 2分钟缓存
+_CACHE_TTL = 120  # 2分钟内存缓存
+
+# 磁盘持久缓存：实时源全不可达时回退，避免白屏「网络超时」
+_CACHE_PATH = os.path.join(tempfile.gettempdir(), "stock_credibility_hot_cache.json")
+
+
+def _save_cache(data):
+    try:
+        with open(_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _load_cache():
+    try:
+        if os.path.exists(_CACHE_PATH):
+            with open(_CACHE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
+def _has_any(d):
+    return bool(d and (d.get("stocks") or d.get("industries") or d.get("concepts")))
 
 
 def _push2_get(path, retries=1):
@@ -307,13 +332,38 @@ def get_hot_concepts():
 
 
 def get_all_hot():
-    """获取全部热门数据"""
-    return {
-        "stocks": get_hot_stocks(),
-        "industries": get_hot_industries(),
-        "concepts": get_hot_concepts(),
+    """
+    获取全部热门数据。
+    容错策略：实时抓取 -> 若全空则回退磁盘缓存并标记 stale；
+    避免网络抖动时白屏「网络超时」。
+    """
+    try:
+        stocks = get_hot_stocks()
+        industries = get_hot_industries()
+        concepts = get_hot_concepts()
+    except Exception:
+        stocks, industries, concepts = [], [], []
+    data = {
+        "stocks": stocks,
+        "industries": industries,
+        "concepts": concepts,
         "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    if _has_any(data):
+        _save_cache(data)          # 实时成功 -> 落盘，供后续回退
+        data["stale"] = False
+        data["note"] = ""
+        return data
+    # 实时全空 -> 回退最近缓存
+    cached = _load_cache()
+    if cached and _has_any(cached):
+        cached["stale"] = True
+        cached["note"] = "实时行情源暂不可达，已显示最近缓存（数据可能延迟）"
+        cached["update_time"] = (cached.get("update_time", "") or "") + "（缓存）"
+        return cached
+    data["stale"] = True
+    data["note"] = "网络超时，暂无可用的热门数据"
+    return data
 
 
 if __name__ == "__main__":

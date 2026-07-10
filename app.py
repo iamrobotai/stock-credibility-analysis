@@ -170,22 +170,30 @@ def index():
 @app.route("/api/hot")
 def api_hot():
     try:
-        from hot_stocks import get_all_hot
+        from hot_stocks import get_all_hot, _load_cache
         result = [None]
         def _fetch():
             result[0] = get_all_hot()
         t = threading.Thread(target=_fetch, daemon=True)
         t.start()
-        t.join(timeout=10)
+        t.join(timeout=15)
         if result[0]:
             return jsonify({"ok": True, "data": result[0]})
+        # 线程超时：直接回退磁盘缓存（若有），不再返回空白「网络超时」
+        cached = _load_cache()
+        if cached:
+            cached["stale"] = True
+            cached["note"] = "实时获取超时，已显示最近缓存"
+            return jsonify({"ok": True, "data": cached})
         return jsonify({"ok": True, "data": {
             "stocks": [], "industries": [], "concepts": [],
-            "update_time": "数据源超时 (非交易时段或网络问题)"}})
+            "stale": True, "note": "网络超时，暂无可用的热门数据",
+            "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}})
     except Exception as e:
         return jsonify({"ok": True, "data": {
             "stocks": [], "industries": [], "concepts": [],
-            "update_time": f"API异常: {str(e)[:40]}"}})
+            "stale": True, "note": f"API异常: {str(e)[:40]}",
+            "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}})
 
 
 @app.route("/api/resolve/<code>")

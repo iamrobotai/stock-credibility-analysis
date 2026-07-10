@@ -545,16 +545,24 @@ async function loadHotData(force) {
   const updateEl = document.getElementById('hot-update');
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(function() { controller.abort(); }, 8000);
+    const timeoutId = setTimeout(function() { controller.abort(); }, 15000);
     const url = force ? '/api/hot?_t=' + Date.now() : '/api/hot';
     const resp = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     const result = await resp.json();
     if (result.ok && result.data) {
       hotData = result.data;
-      if ((!hotData.stocks || hotData.stocks.length === 0) && (!hotData.industries || hotData.industries.length === 0)) {
-        updateEl.textContent = result.data.update_time || '暂无实时数据（非交易时段）';
-        grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:20px">暂无实时数据<br><small>非交易时段或API限流，可手动输入代码分析</small></div>';
+      const isEmpty = (!hotData.stocks || hotData.stocks.length === 0) && (!hotData.industries || hotData.industries.length === 0);
+      if (hotData.stale) {
+        // 实时源不可用，已回退缓存/空：用琥珀色提示而非空白报错
+        updateEl.textContent = '⚠ ' + (hotData.note || '数据延迟（使用缓存）');
+        updateEl.style.color = '#d29922';
+      } else {
+        updateEl.style.color = '';
+      }
+      if (isEmpty) {
+        if (!hotData.stale) updateEl.textContent = result.data.update_time || '暂无实时数据（非交易时段）';
+        grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:20px">' + (hotData.note || '暂无实时数据') + '<br><small>可手动输入代码分析</small></div>';
       } else {
         renderHot();
       }

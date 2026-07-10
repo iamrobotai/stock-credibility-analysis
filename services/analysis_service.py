@@ -179,6 +179,15 @@ def run_batch(stocks: List[Dict], log: Optional[Callable] = None,
     fail = 0
     _safe_log(log, f"批量开始: 共 {total} 只", "info")
 
+    # 启动即探测数据源可达性，把「哪些源挂了」打到日志，避免笼统「网络超时」
+    try:
+        from data_collector import probe_sources
+        _safe_log(log, "正在探测数据源可达性...", "info")
+        for line in probe_sources():
+            _safe_log(log, "  源探测: " + line, "info" if "✅" in line else "warn")
+    except Exception:
+        pass
+
     for i, stock in enumerate(stocks):
         if callable(should_stop) and should_stop():
             _safe_log(log, "用户停止", "warn")
