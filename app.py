@@ -99,7 +99,9 @@ def run_batch_task(state):
     """批量任务线程：解析股票清单 → 委托 analysis_service.run_batch。"""
     try:
         payload = state.payload
-        if payload["mode"] == "industry":
+        # 防御式取值：前端任何缺键都不得让整批任务秒崩（曾因 KeyError('mode') 被误显为「网络超时」）
+        mode = (payload.get("mode") or "batch")
+        if mode == "industry":
             sys.path.insert(0, str(BASE_DIR))
             from run_all_20 import INDUSTRIES
             stocks = []
@@ -107,11 +109,11 @@ def run_batch_task(state):
                 for c in ind["companies"]:
                     stocks.append({"code": c["code"], "name": c["name"], "industry": ind["name"]})
             state.total = len(stocks)
-        elif payload["mode"] == "batch":
-            stocks = payload["stocks"]
+        elif mode == "batch":
+            stocks = payload.get("stocks") or []
             state.total = len(stocks)
         else:
-            stocks = [{"code": payload["code"],
+            stocks = [{"code": payload.get("code", ""),
                        "name": payload.get("name", ""),
                        "industry": payload.get("industry", "")}]
             state.total = 1
