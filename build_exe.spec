@@ -54,19 +54,44 @@ hiddenimports = (
 hiddenimports += [
     "flask", "jinja2", "werkzeug", "markupsafe", "itsdangerous",
     "click", "blinker", "pandas", "numpy",
-    "akshare", "requests", "lxml", "openpyxl", "bs4", "html5lib",
+    "requests", "lxml", "openpyxl", "bs4", "html5lib",
+    # 注：akshare 不走 collect_submodules（会被塞进 PYZ 致 __file__ 虚拟，
+    # 其 file_fold/calendar.json 等数据文件按 __file__ 定位会失败），
+    # 改由下方 collect_all 以「真实文件」形式抽取（见 a = Analysis 之前）。
 ]
 
-# akshare 可能用到的数据/模板文件
+# ---- akshare 必须以「真实文件」打入 exe（非 PYZ 压缩） ----
+# 原因：akshare.futures.cons.get_calendar() 在运行时按 __file__ 定位
+#   os.path.dirname(os.path.dirname(__file__))/file_fold/calendar.json
+# 若 akshare 被 PyInstaller 收进 PYZ，其 __file__ 为虚拟路径，
+# 找不到数据文件 → FileNotFoundError → 分析任务 `import akshare` 即崩溃。
+# collect_all 同时返回 (binaries, datas, hiddenimports)，使 akshare 的
+# 模块与数据文件落在同一真实目录，__file__ 解析正确。
 try:
-    hiddenimports += collect_submodules("akshare")
+    from PyInstaller.utils.hooks import collect_all
+    ak_bin, ak_datas, ak_hidden = collect_all("akshare")
+    akshare_binaries = list(ak_bin)
+    akshare_datas = list(ak_datas)
+    hiddenimports += list(ak_hidden)
+except Exception:
+    akshare_binaries, akshare_datas = [], []
+
+# docx（Word 报告生成）同样以「真实文件」抽取：其内置 default.docx
+# 模板按包内相对路径读取，若被塞进 PYZ 数据文件定位会失败。
+try:
+    docx_bin, docx_datas, docx_hidden = collect_all("docx")
+    akshare_binaries += list(docx_bin)
+    akshare_datas += list(docx_datas)
+    hiddenimports += list(docx_hidden)
 except Exception:
     pass
+
+extra_datas = list(akshare_datas)
 
 a = Analysis(
     ["launcher.py"],
     pathex=[project_dir],
-    binaries=[],
+    binaries=akshare_binaries,
     datas=[
         (os.path.join(project_dir, "templates"), "templates"),
         (os.path.join(project_dir, "static"), "static"),
@@ -77,7 +102,7 @@ a = Analysis(
         (os.path.join(project_dir, "ai"), "ai"),
         (os.path.join(project_dir, "export"), "export"),
         (os.path.join(project_dir, "scripts"), "scripts"),
-    ],
+    ] + extra_datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
