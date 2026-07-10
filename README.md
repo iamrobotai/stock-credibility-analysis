@@ -10,10 +10,11 @@
 |------|------|
 | **实时热门推荐** | 东财热度榜 + 涨幅榜 + 主力净流入榜 + 行业涨幅排行，2 分钟自动刷新 |
 | **股票代码自动解析** | 输入代码 → 自动获取名称、行业（一级+二级）、地域 |
-| **多 AI 提供商** | Ollama(本地零Token) / DeepSeek / 通义千问 / OpenAI / 智谱GLM，统一接口自由切换 |
+| **多 AI 提供商** | Ollama / **LM Studio** (本地零Token) / DeepSeek / 通义千问 / OpenAI / 智谱GLM，统一接口自由切换，**自动检测已加载模型** |
 | **13 平台数据采集** | K线/新闻/研报/财务/公告/互动易/同花顺/资金流/龙虎榜/雪球/股吧/淘股吧/评论 |
 | **情绪帖过滤** | 自动识别并过滤喊单帖、情绪化帖子，保留含实质内容的高价值帖子 |
 | **D1-D8 八维评分** | 规则引擎评分 + LLM 深度分析，生成完整 Word 报告 |
+| **技术指标** | 14 种技术指标 (MACD/KDJ/RSI/BOLL/CCI/WR/ATR 等) + 50+ K线形态识别 + D9 技术信号评分 |
 
 ### 分析维度 (D1-D8)
 
@@ -51,6 +52,7 @@
          → data_collector (13平台采集, ~1200数据点/股)
          → segment (摆荡腿价格分段)
          → score_rules (D1-D8 规则评分)
+         → technical (D9 技术指标评分)
          → llm_enhance (AI 深度分析, JSON输出)
          → gen_docx_full (12章节 Word 报告)
 ```
@@ -100,7 +102,16 @@ ollama pull qwen3:4b
 ollama serve
 ```
 
-#### 方案 B: 云端 API (需 API Key)
+#### 方案 B: LM Studio 本地 AI (零 Token)
+
+```bash
+# 安装 LM Studio: https://lmstudio.ai/
+# 1. 在 LM Studio 中下载所需模型 (如 Qwen3.5-9B)
+# 2. 点击 "Start Server" 启动本地 API 服务 (默认端口 1234)
+# 3. 在 Web 界面中选择 "LM Studio" 提供商，点击"检测模型"自动获取已加载模型
+```
+
+#### 方案 C: 云端 API (需 API Key)
 
 在 Web 界面中配置，或手动编辑 `ai_config.json`:
 
@@ -121,7 +132,8 @@ ollama serve
 
 | 提供商 | 模型 | URL | 说明 |
 |--------|------|-----|------|
-| Ollama | qwen3:4b | http://localhost:11434 | 本地零 Token |
+| Ollama | qwen3:4b | http://localhost:11434 | 本地零 Token，自动检测已安装模型 |
+| **LM Studio** | (自动检测) | http://localhost:1234/v1 | 本地零 Token，自动检测已加载模型 |
 | DeepSeek | deepseek-chat | https://api.deepseek.com/v1 | 性价比高 |
 | 通义千问 | qwen-plus | https://dashscope.aliyuncs.com/compatible-mode/v1 | 阿里云 |
 | OpenAI | gpt-4o-mini | https://api.openai.com/v1 | 需海外网络 |
@@ -191,38 +203,57 @@ python app.py
 | `/api/ai/providers` | GET | AI 提供商列表 |
 | `/api/ai/config` | GET/POST | 获取/设置 AI 配置 |
 | `/api/ai/test` | POST | 测试 AI 连通性 |
+| `/api/ai/models/<provider>` | GET | 自动检测本地 AI 已加载模型 (Ollama/LM Studio) |
 | `/api/run` | POST | 启动分析任务 |
 | `/api/status/<run_id>` | GET | 查询任务进度 |
 | `/api/stop/<run_id>` | POST | 停止任务 |
 | `/api/stocks` | GET | 已有报告列表 |
+| `/api/preview/<code>` | GET | 股票分析数据在线预览 |
+| `/api/technical/<code>` | GET | 14种技术指标 + K线形态数据 |
+| `/api/chart/<code>` | GET | 股票价格走势图 PNG |
+| `/api/export/excel/<code>` | GET | 生成并下载 Excel 报告 |
+| `/api/industry/chart` | POST | 行业多股走势叠加图 |
+| `/api/industry/preview` | GET | 行业对比预览数据 |
 | `/download/<filename>` | GET | 下载报告文件 |
 
 ## 项目结构
 
 ```
 stock-credibility-analysis/
-├── app.py                  # Flask Web 应用主入口
-├── hot_stocks.py           # 实时热门股票与行业推荐
-├── stock_resolver.py       # 股票代码自动解析
-├── ai_provider.py          # 多 AI 提供商抽象层
-├── ai_config.json          # AI 配置文件 (需自行创建)
-├── data_collector.py       # 13 平台数据采集器
-├── collectors.py           # 扩展平台采集器 (备用)
-├── segment.py              # 摆荡腿价格分段算法
-├── score_rules.py          # D1-D8 规则评分引擎
-├── llm_enhance.py          # LLM 深度分析模块
-├── gen_docx_full.py        # Word 报告生成器
-├── pipeline.py             # 单行业流水线编排
-├── run_all_20.py           # 20 行业全量配置
-├── regen_all.py            # 全量重新生成报告
-├── build_chart.py          # 图表生成工具
-├── gen_charts.py           # 批量图表生成
-├── requirements.txt        # Python 依赖
-├── 启动分析系统.bat         # Windows 一键启动
+├── app.py                      # Flask Web 应用主入口 (v2.5)
+├── ai_config.json              # AI 配置文件 (gitignore, 自动生成)
+├── ai_config.example.json      # AI 配置示例 (提交到仓库)
+├── requirements.txt            # Python 依赖
+├── README.md
+├── LICENSE
+├── .gitignore
+├── 启动分析系统.bat             # Windows 一键启动
 ├── templates/
-│   └── index.html          # Web 前端界面
-├── data/                   # 运行时数据 (自动创建)
-└── *.docx                  # 生成的分析报告
+│   └── index.html              # Web 前端界面 (v2.5)
+├── core/                       # 核心分析模块
+│   ├── stock_resolver.py       # 股票代码自动解析
+│   ├── data_collector.py       # 13 平台数据采集器
+│   ├── collectors.py           # 扩展平台采集器
+│   ├── segment.py              # 摆荡腿价格分段算法
+│   ├── score_rules.py          # D1-D8 规则评分引擎
+│   ├── technical.py            # 14种技术指标 + K线形态识别
+│   └── hot_stocks.py           # 实时热门股票与行业推荐
+├── ai/                         # AI 提供商模块
+│   ├── ai_provider.py          # 多 AI 抽象层 (Ollama/LM Studio/云端)
+│   └── llm_enhance.py          # LLM 深度分析模块
+├── export/                     # 报告生成模块
+│   ├── chart_gen.py            # 图表生成 (个股走势/行业叠加)
+│   ├── gen_docx_full.py        # Word 报告生成器 (12章节)
+│   ├── gen_excel.py            # Excel 报告生成器
+│   └── gen_per_company.py      # 按公司生成报告
+├── scripts/                    # 工具脚本
+│   ├── pipeline.py             # 单行业流水线编排
+│   ├── run_all_20.py           # 20 行业全量配置
+│   └── ...                     # 其他测试/调试脚本
+├── configs/                    # 行业配置文件
+├── data/                       # 运行时数据 (gitignore, 自动创建)
+├── output/                     # 生成报告 (gitignore, 自动创建)
+└── docs/                       # 分析文档 (gitignore)
 ```
 
 ## 技术细节
@@ -232,6 +263,7 @@ stock-credibility-analysis/
 - **K线数据**: 新浪财经 `stock_zh_a_daily` 接口，全历史日线数据
 - **多 CDN 容错**: push2 API 支持 5 个 CDN 节点自动切换 (82/48/18/56/default)
 - **新浪备用**: 涨幅榜和行业排行使用新浪 API 作为 push2 限流时的备用源
+- **超时保护**: 热门数据接口使用线程 + 10 秒超时保护，防止 push2 API 卡死
 - **缓存机制**: 热门数据 2 分钟缓存，股票解析结果持久化缓存
 
 ### 价格分段算法
@@ -243,8 +275,9 @@ stock-credibility-analysis/
 
 ### LLM 深度分析
 
-- Ollama qwen3:4b: `think=false` + `format=json` + `num_predict=1500`
-- 云端 API: OpenAI 兼容协议，统一 `call_ai()` 接口
+- **Ollama**: `think=false` + `format=json` + `num_predict=1500`，自动检测已安装模型
+- **LM Studio**: OpenAI 兼容接口，自动检测已加载模型，零 Token 消耗
+- **云端 API**: OpenAI 兼容协议 (DeepSeek/通义千问/OpenAI/智谱)，统一 `call_ai()` 接口
 - 输出结构化 JSON: 总体评价 + 风险提示 + 催化剂 + 广告甄别 + D1-D8 LLM 评价
 
 ### Word 报告

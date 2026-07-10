@@ -15,7 +15,12 @@ from pathlib import Path
 
 from ai_provider import call_ai, load_config, get_active_provider
 
-DATA_DIR = Path(__file__).parent / "data"
+# 支持目录重组：从子目录中找到项目根
+_PROJECT_ROOT = Path(__file__).resolve().parent
+while _PROJECT_ROOT.name and not (_PROJECT_ROOT / "data").exists() and _PROJECT_ROOT.parent != _PROJECT_ROOT:
+    _PROJECT_ROOT = _PROJECT_ROOT.parent
+
+DATA_DIR = _PROJECT_ROOT / "data"
 SYSTEM_MSG = "你是专业股票分析API。只返回JSON对象,不要输出任何其他文字。"
 
 

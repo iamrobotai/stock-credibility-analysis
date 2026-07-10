@@ -1,26 +1,24 @@
 # -*- coding: utf-8 -*-
 """
 ai_provider.py — 多 AI 提供商统一抽象层
-支持: ollama(本地) / deepseek / qwen(通义千问) / openai / zhipu(智谱GLM)
-统一接口: call_ai(messages, provider, config) → (text, stats)
+支持: ollama(本地) / lmstudio(本地) / deepseek / qwen(通义千问) / openai / zhipu(智谱GLM)
+统一接口: call_ai(messages, provider, config) -> (text, stats)
 
-配置文件: ai_config.json
-{
-  "active_provider": "ollama",
-  "providers": {
-    "ollama":   {"url": "http://localhost:11434", "model": "qwen3:4b"},
-    "deepseek": {"api_key": "", "model": "deepseek-chat"},
-    "qwen":     {"api_key": "", "model": "qwen-plus"},
-    "openai":   {"api_key": "", "model": "gpt-4o-mini"},
-    "zhipu":    {"api_key": "", "model": "glm-4-flash"}
-  }
-}
+配置文件: ai_config.json (项目根目录)
 """
 import json, os, time, sys
 from pathlib import Path
 import requests
 
-CONFIG_FILE = Path(__file__).parent / "ai_config.json"
+# 支持目录重组：从子目录中找到项目根
+_PROJECT_ROOT = Path(__file__).resolve().parent
+while _PROJECT_ROOT.name and not (_PROJECT_ROOT / "ai_config.json").exists() and _PROJECT_ROOT.parent != _PROJECT_ROOT:
+    _PROJECT_ROOT = _PROJECT_ROOT.parent
+
+CONFIG_FILE = _PROJECT_ROOT / "ai_config.json"
+
+# 不需要 API Key 的本地提供商
+_LOCAL_PROVIDERS = {"ollama", "lmstudio"}
 
 # 默认配置
 DEFAULT_CONFIG = {
@@ -31,6 +29,12 @@ DEFAULT_CONFIG = {
             "model": "qwen3:4b",
             "label": "Ollama (本地)",
             "note": "零 token，需本地安装 Ollama",
+        },
+        "lmstudio": {
+            "url": "http://localhost:1234/v1",
+            "model": "",
+            "label": "LM Studio (本地)",
+            "note": "零 token，需本地安装 LM Studio 并启动 Server",
         },
         "deepseek": {
             "api_key": "",
@@ -116,13 +120,75 @@ def list_providers():
             "model": val.get("model", ""),
             "note": val.get("note", ""),
             "active": key == cfg.get("active_provider"),
-            "needs_key": key != "ollama",
+            "needs_key": key not in _LOCAL_PROVIDERS,
             "has_key": bool(val.get("api_key")),
+            "url": val.get("url", ""),
         })
     return result
 
 
-# ── 各提供商调用实现 ──
+# -- 模型自动检测 --
+
+def list_models(provider):
+    """
+    获取指定提供商的可用模型列表 (仅支持本地提供商)
+    返回 [{"id": "model_name", "label": "display_name"}]
+    """
+    cfg = load_config()
+    provider_cfg = cfg.get("providers", {}).get(provider, {})
+    if provider == "ollama":
+        return _list_ollama_models(provider_cfg)
+    elif provider == "lmstudio":
+        return _list_lmstudio_models(provider_cfg)
+    else:
+        # 云端提供商返回空列表 (模型名手动输入)
+        return []
+
+
+def _list_ollama_models(provider_cfg):
+    """获取 Ollama 已安装的模型列表"""
+    url = provider_cfg.get("url", "http://localhost:11434")
+    try:
+        r = requests.get(f"{url}/api/tags", timeout=5)
+        data = r.json()
+        models = []
+        for m in data.get("models", []):
+            name = m.get("name", "")
+            size_mb = m.get("size", 0) / 1024 / 1024
+            models.append({
+                "id": name,
+                "label": f"{name} ({size_mb:.0f}MB)" if size_mb > 0 else name,
+            })
+        return models
+    except Exception:
+        return []
+
+
+def _list_lmstudio_models(provider_cfg):
+    """获取 LM Studio 已加载的模型列表"""
+    url = provider_cfg.get("url", "http://localhost:1234/v1")
+    # 去掉末尾的 /v1 再重新拼接，确保格式正确
+    base = url.rstrip("/")
+    if base.endswith("/v1"):
+        api_url = base
+    else:
+        api_url = base + "/v1"
+    try:
+        r = requests.get(f"{api_url}/models", timeout=5)
+        data = r.json()
+        models = []
+        for m in data.get("data", []):
+            model_id = m.get("id", "")
+            models.append({
+                "id": model_id,
+                "label": model_id,
+            })
+        return models
+    except Exception:
+        return []
+
+
+# -- 各提供商调用实现 --
 
 def _call_ollama(messages, provider_cfg, **kwargs):
     """Ollama chat API"""
@@ -151,9 +217,9 @@ def _call_ollama(messages, provider_cfg, **kwargs):
 
 
 def _call_openai_compat(messages, provider_cfg, **kwargs):
-    """OpenAI 兼容接口 (deepseek/qwen/openai/zhipu 通用)"""
+    """OpenAI 兼容接口 (lmstudio/deepseek/qwen/openai/zhipu 通用)"""
     url = provider_cfg.get("url", "https://api.openai.com/v1")
-    api_key = provider_cfg.get("api_key", "")
+    api_key = provider_cfg.get("api_key", "lm-studio")
     model = provider_cfg.get("model", "")
     use_json = kwargs.get("format_json", True)
 
@@ -206,9 +272,13 @@ def call_ai(messages, provider=None, config=None, **kwargs):
 
     provider_cfg = providers[provider]
 
-    # 检查 API key (ollama 不需要)
-    if provider != "ollama" and not provider_cfg.get("api_key"):
+    # 检查 API key (本地提供商不需要)
+    if provider not in _LOCAL_PROVIDERS and not provider_cfg.get("api_key"):
         raise ValueError(f"提供商 {provider} 未配置 API Key")
+
+    # LM Studio 需要模型名
+    if provider == "lmstudio" and not provider_cfg.get("model"):
+        raise ValueError("LM Studio 未选择模型，请先检测并选择已加载的模型")
 
     t0 = time.time()
     if provider == "ollama":
@@ -242,16 +312,14 @@ def test_provider(provider=None):
 
 
 if __name__ == "__main__":
-    # 测试
     print("可用 AI 提供商:")
     for p in list_providers():
-        status = "✅" if p["active"] else "  "
+        status = "[active]" if p["active"] else "       "
         key = "有Key" if p["has_key"] else ("无需" if not p["needs_key"] else "无Key")
-        print(f"  {status} {p['id']:10s} | {p['label']:15s} | model={p['model']:20s} | {key}")
+        print(f"  {status} {p['id']:10s} | {p['label']:20s} | model={p['model']:20s} | {key}")
     print()
 
-    # 测试 active provider
     active = get_active_provider()
     print(f"测试 active provider: {active}")
     result = test_provider()
-    print(f"  {'✅' if result['ok'] else '❌'} {result.get('response', result.get('error', ''))[:100]}")
+    print(f"  {'OK' if result['ok'] else 'FAIL'} {result.get('response', result.get('error', ''))[:100]}")

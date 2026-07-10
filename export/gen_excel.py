@@ -15,7 +15,12 @@ except ImportError:
     HAS_OPENPYXL = False
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+# 支持目录重组：从子目录中找到项目根
+while not os.path.exists(os.path.join(BASE, "data")) and os.path.dirname(BASE) != BASE:
+    BASE = os.path.dirname(BASE)
 DATADIR = os.path.join(BASE, "data")
+OUTDIR = os.path.join(BASE, "output")
+os.makedirs(OUTDIR, exist_ok=True)
 
 # 样式
 HEADER_FONT = Font(name="微软雅黑", size=10, bold=True, color="FFFFFF")
@@ -354,7 +359,7 @@ def generate(code, name="", industry=""):
     # 保存
     safe_name = name.replace("/", "_").replace(" ", "") if name else code
     outname = f"{safe_name}_{code}_分析.xlsx"
-    outpath = os.path.join(BASE, outname)
+    outpath = os.path.join(OUTDIR, outname)
     wb.save(outpath)
     print(f"[excel] {outpath} ({os.path.getsize(outpath)//1024}KB)")
     return outpath

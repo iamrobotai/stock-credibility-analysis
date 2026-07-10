@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>股票可信度分析系统 v2.4</title>
+<title>股票可信度分析系统 v2.5</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
@@ -78,11 +78,12 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 .platform-item .plat-desc { font-size: 11px; color: #8b949e; }
 
 /* AI 提供商 */
-.ai-provider-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ai-provider-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 .ai-status { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
 .ai-status.ok { background: #23863620; color: #3fb950; }
 .ai-status.fail { background: #f8514920; color: #f85149; }
 .ai-status.pending { background: #d2992220; color: #d29922; }
+.model-select-hint { font-size: 11px; color: #8b949e; margin-top: 4px; }
 
 .resolve-result { font-size: 13px; color: #3fb950; margin-top: 4px; }
 .resolve-result.error { color: #f85149; }
@@ -93,7 +94,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 
 /* 热门推荐 */
 .hot-section { margin-bottom: 16px; }
-.hot-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.hot-tabs { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
 .hot-tab { padding: 6px 14px; font-size: 13px; border-radius: 6px; cursor: pointer;
   background: #21262d; color: #8b949e; border: 1px solid #30363d; transition: all 0.2s; }
 .hot-tab.active { background: #238636; color: #fff; border-color: #238636; }
@@ -157,8 +158,8 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 </head>
 <body>
 <div class="header">
-  <h1>📊 股票可信度分析系统 v2.4</h1>
-  <span class="badge">指标 · 形态 · 预览 · 链接</span>
+  <h1>📊 股票可信度分析系统 v2.5</h1>
+  <span class="badge">LM Studio · 指标 · 形态 · 预览</span>
 </div>
 
 <div class="container">
@@ -231,6 +232,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
           <label>选择 AI</label>
           <select id="ai_provider" onchange="onAIChange()">
             <option value="ollama">Ollama (本地, 零Token)</option>
+            <option value="lmstudio">LM Studio (本地, 零Token)</option>
             <option value="deepseek">DeepSeek</option>
             <option value="qwen">通义千问</option>
             <option value="openai">OpenAI</option>
@@ -238,12 +240,16 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
           </select>
         </div>
         <div class="form-group">
-          <label>模型</label>
-          <input type="text" id="ai_model" placeholder="模型名称" value="qwen3:4b">
+          <label>模型 <span id="model-hint" style="color:#8b949e;font-size:11px"></span></label>
+          <div style="display:flex; gap:8px">
+            <input type="text" id="ai_model" placeholder="模型名称" value="qwen3:4b" style="flex:1" onchange="document.getElementById('ai_model').dataset.userModified='1'">
+            <button class="btn btn-sm btn-secondary" id="detect-models-btn" onclick="detectModels()" style="display:none">🔍 检测模型</button>
+          </div>
+          <select id="ai_model_select" style="display:none; margin-top:4px" onchange="selectDetectedModel()"></select>
         </div>
         <div class="form-group" id="ai_key_group">
           <label>API Key</label>
-          <input type="password" id="ai_key" placeholder="输入 API Key (Ollama 无需)">
+          <input type="password" id="ai_key" placeholder="输入 API Key (本地 AI 无需)">
         </div>
         <div class="ai-provider-row">
           <button class="btn btn-sm btn-secondary" onclick="testAI()">🔌 测试连接</button>
@@ -342,35 +348,38 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 </div>
 
 <script>
+"use strict";
+
 let runId = null;
 let polling = null;
 let platformsData = [];
 let hotData = null;
 let hotTab = 'stocks';
 let hotTimer = null;
+let detectedModels = [];
 
-// ── 初始化 ──
+// -- 初始化 --
 async function init() {
   await loadPlatforms();
   await loadAIConfig();
-  await loadHotData();  // 等待热门数据加载完成
-  hotTimer = setInterval(() => loadHotData(), 120000);
+  await loadHotData();
+  hotTimer = setInterval(function() { loadHotData(); }, 120000);
 }
 
-// ── 热门数据 ──
+// -- 热门数据 --
 async function loadHotData(force) {
   const grid = document.getElementById('hot-grid');
   const updateEl = document.getElementById('hot-update');
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 秒超时
+    const timeoutId = setTimeout(function() { controller.abort(); }, 8000);
     const url = force ? '/api/hot?_t=' + Date.now() : '/api/hot';
     const resp = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     const result = await resp.json();
     if (result.ok && result.data) {
       hotData = result.data;
-      if (!hotData.stocks || hotData.stocks.length === 0 && !hotData.industries || hotData.industries.length === 0) {
+      if ((!hotData.stocks || hotData.stocks.length === 0) && (!hotData.industries || hotData.industries.length === 0)) {
         updateEl.textContent = result.data.update_time || '暂无实时数据（非交易时段）';
         grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:20px">暂无实时数据<br><small>非交易时段或API限流，可手动输入代码分析</small></div>';
       } else {
@@ -389,9 +398,13 @@ async function loadHotData(force) {
 
 function switchHotTab(tab, evt) {
   hotTab = tab;
-  document.querySelectorAll('.hot-tab').forEach(t => t.classList.remove('active'));
-  if (evt && evt.target) evt.target.classList.add('active');
-  else document.querySelector(`.hot-tab[onclick*="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('.hot-tab').forEach(function(t) { t.classList.remove('active'); });
+  if (evt && evt.target) {
+    evt.target.classList.add('active');
+  } else {
+    const el = document.querySelector('.hot-tab[onclick*="' + tab + '"]');
+    if (el) el.classList.add('active');
+  }
   renderHot();
 }
 
@@ -413,51 +426,57 @@ function renderHot() {
     return;
   }
 
-  grid.innerHTML = items.map(item => {
+  grid.innerHTML = items.map(function(item) {
     const change = item.change_pct || 0;
     const cls = change >= 0 ? 'up' : 'down';
     const sign = change >= 0 ? '+' : '';
-    const codeStr = hotTab === 'stocks' ? `<span class="hot-code">${item.code}</span>` : '';
-    const tagStr = item.source ? `<span class="hot-tag">${item.source}</span>` : '';
-    const flowStr = item.net_inflow !== undefined ? ` | ${item.net_inflow}亿` : '';
-    const clickHandler = hotTab === 'stocks'
-      ? `onclick="pickHotStock('${item.code}','${item.name.replace(/'/g,"")}')"`,
-      : `onclick="pickHotIndustry('${item.name.replace(/'/g,"")}', '${item.top_stock_code || ""}', '${(item.top_stock_name || "").replace(/'/g,"")}')"`;
-    return `<div class="hot-item" ${clickHandler}>
-      ${codeStr}
-      <span class="hot-name">${item.name}</span>
-      <span class="hot-change ${cls}">${sign}${change.toFixed(2)}%${flowStr}</span>
-      ${tagStr}
-    </div>`;
+    let codeStr = '';
+    let clickHandler = '';
+
+    if (hotTab === 'stocks') {
+      codeStr = '<span class="hot-code">' + item.code + '</span>';
+      const safeName = String(item.name || '').replace(/'/g, '');
+      clickHandler = "onclick=\"pickHotStock('" + item.code + "','" + safeName + "')\"";
+    } else {
+      const safeName = String(item.name || '').replace(/'/g, '');
+      const topCode = String(item.top_stock_code || '');
+      const topName = String(item.top_stock_name || '').replace(/'/g, '');
+      clickHandler = "onclick=\"pickHotIndustry('" + safeName + "','" + topCode + "','" + topName + "')\"";
+    }
+
+    const tagStr = item.source ? '<span class="hot-tag">' + item.source + '</span>' : '';
+    const flowStr = item.net_inflow !== undefined ? ' | ' + item.net_inflow + '亿' : '';
+    return '<div class="hot-item" ' + clickHandler + '>' +
+      codeStr +
+      '<span class="hot-name">' + item.name + '</span>' +
+      '<span class="hot-change ' + cls + '">' + sign + change.toFixed(2) + '%' + flowStr + '</span>' +
+      tagStr +
+    '</div>';
   }).join('');
 }
 
 function pickHotStock(code, name) {
-  // 切换到单只模式
   document.getElementById('mode').value = 'single';
   toggleMode();
   document.getElementById('stock_code').value = code;
   document.getElementById('stock_name').value = name;
-  // 自动解析行业
   resolveStock();
-  log(`已选择热门股票: ${name} (${code})`, 'info');
+  log('已选择热门股票: ' + name + ' (' + code + ')', 'info');
 }
 
 function pickHotIndustry(industryName, topCode, topName) {
-  // 如果有领涨股，直接选中
   if (topCode) {
-    const code = topCode.replace('sh','').replace('sz','');
+    const code = topCode.replace('sh', '').replace('sz', '');
     document.getElementById('mode').value = 'single';
     toggleMode();
     document.getElementById('stock_code').value = code;
     document.getElementById('stock_name').value = topName;
     document.getElementById('stock_industry').value = industryName;
-    log(`已选择热门行业 [${industryName}] 领涨股: ${topName} (${code})`, 'info');
+    log('已选择热门行业 [' + industryName + '] 领涨股: ' + topName + ' (' + code + ')', 'info');
   } else {
-    // 切换到批量模式
     document.getElementById('mode').value = 'batch';
     toggleMode();
-    log(`热门行业: ${industryName}，请在批量模式中输入该行业股票代码`, 'info');
+    log('热门行业: ' + industryName + '，请在批量模式中输入该行业股票代码', 'info');
   }
 }
 
@@ -468,31 +487,30 @@ async function loadPlatforms() {
     platformsData = data.platforms;
     const grid = document.getElementById('platform-grid');
     grid.innerHTML = '';
-    platformsData.forEach(p => {
+    platformsData.forEach(function(p) {
       const div = document.createElement('div');
       div.className = 'platform-item checked';
       div.dataset.id = p.id;
-      div.innerHTML = `
-        <input type="checkbox" checked onchange="togglePlatform('${p.id}')">
-        <div>
-          <div class="plat-label">${p.label}</div>
-          <div class="plat-desc">${p.desc}</div>
-        </div>
-        <span class="cat-tag ${p.category}">${p.category === 'core' ? '核心' : p.category === 'high' ? '高价值' : '情绪'}</span>
-      `;
+      div.innerHTML =
+        '<input type="checkbox" checked onchange="togglePlatform(\'' + p.id + '\')">' +
+        '<div>' +
+        '<div class="plat-label">' + p.label + '</div>' +
+        '<div class="plat-desc">' + p.desc + '</div>' +
+        '</div>' +
+        '<span class="cat-tag ' + p.category + '">' + (p.category === 'core' ? '核心' : p.category === 'high' ? '高价值' : '情绪') + '</span>';
       grid.appendChild(div);
     });
   } catch(e) { console.error('loadPlatforms:', e); }
 }
 
 function togglePlatform(id) {
-  const item = document.querySelector(`.platform-item[data-id="${id}"]`);
+  const item = document.querySelector('.platform-item[data-id="' + id + '"]');
   const cb = item.querySelector('input');
   item.classList.toggle('checked', cb.checked);
 }
 
 function selectAllPlatforms(checked) {
-  document.querySelectorAll('.platform-item').forEach(item => {
+  document.querySelectorAll('.platform-item').forEach(function(item) {
     const cb = item.querySelector('input');
     cb.checked = checked;
     item.classList.toggle('checked', checked);
@@ -500,8 +518,8 @@ function selectAllPlatforms(checked) {
 }
 
 function selectHighValue() {
-  platformsData.forEach(p => {
-    const item = document.querySelector(`.platform-item[data-id="${p.id}"]`);
+  platformsData.forEach(function(p) {
+    const item = document.querySelector('.platform-item[data-id="' + p.id + '"]');
     const cb = item.querySelector('input');
     const isHigh = p.category !== 'emotional';
     cb.checked = isHigh;
@@ -511,10 +529,10 @@ function selectHighValue() {
 
 function getSelectedPlatforms() {
   return Array.from(document.querySelectorAll('.platform-item input:checked'))
-    .map(cb => cb.parentElement.dataset.id);
+    .map(function(cb) { return cb.parentElement.dataset.id; });
 }
 
-// ── 股票代码解析 ──
+// -- 股票代码解析 --
 async function resolveStock() {
   const code = document.getElementById('stock_code').value.trim();
   if (!code) return;
@@ -522,12 +540,12 @@ async function resolveStock() {
   resultEl.className = 'resolve-result';
   resultEl.textContent = '解析中...';
   try {
-    const resp = await fetch(`/api/resolve/${code}`);
+    const resp = await fetch('/api/resolve/' + code);
     const data = await resp.json();
     if (data.ok && data.data.name) {
       document.getElementById('stock_name').value = data.data.name;
       document.getElementById('stock_industry').value = data.data.industry || '';
-      resultEl.textContent = `✅ ${data.data.name} | 行业: ${data.data.industry || '未知'} | 一级: ${data.data.industry_l1 || '-'}`;
+      resultEl.textContent = '✅ ' + data.data.name + ' | 行业: ' + (data.data.industry || '未知') + ' | 一级: ' + (data.data.industry_l1 || '-');
     } else {
       resultEl.className = 'resolve-result error';
       resultEl.textContent = '❌ 未找到该股票';
@@ -542,11 +560,11 @@ async function resolveBatch() {
   const text = document.getElementById('batch_config').value;
   let stocks;
   try { stocks = JSON.parse(text); } catch(e) { log('JSON 格式错误', 'fail'); return; }
-  log(`批量解析 ${stocks.length} 只股票...`, 'info');
+  log('批量解析 ' + stocks.length + ' 只股票...', 'info');
   for (let s of stocks) {
     if (!s.name) {
       try {
-        const resp = await fetch(`/api/resolve/${s.code}`);
+        const resp = await fetch('/api/resolve/' + s.code);
         const data = await resp.json();
         if (data.ok && data.data.name) {
           s.name = data.data.name;
@@ -559,33 +577,100 @@ async function resolveBatch() {
   log('批量解析完成', 'ok');
 }
 
-// ── AI 配置 ──
+// -- AI 配置 --
 async function loadAIConfig() {
   try {
     const resp = await fetch('/api/ai/config');
     const data = await resp.json();
     document.getElementById('ai_provider').value = data.active_provider;
     const p = data.providers[data.active_provider] || {};
-    document.getElementById('ai_model').value = p.model || '';
+    const modelEl = document.getElementById('ai_model');
+    modelEl.value = p.model || '';
+    modelEl.dataset.userModified = '';
     onAIChange();
   } catch(e) { console.error('loadAIConfig:', e); }
 }
 
+var LOCAL_PROVIDERS = ['ollama', 'lmstudio'];
+var DEFAULT_MODELS = {
+  ollama: 'qwen3:4b',
+  lmstudio: '',
+  deepseek: 'deepseek-chat',
+  qwen: 'qwen-plus',
+  openai: 'gpt-4o-mini',
+  zhipu: 'glm-4-flash',
+};
+
 function onAIChange() {
   const provider = document.getElementById('ai_provider').value;
   const keyGroup = document.getElementById('ai_key_group');
-  keyGroup.style.display = provider === 'ollama' ? 'none' : '';
+  const isLocal = LOCAL_PROVIDERS.indexOf(provider) >= 0;
+  keyGroup.style.display = isLocal ? 'none' : '';
+
+  // 显示/隐藏模型检测按钮
+  const detectBtn = document.getElementById('detect-models-btn');
+  const modelSelect = document.getElementById('ai_model_select');
+  if (isLocal) {
+    detectBtn.style.display = '';
+    if (provider === 'lmstudio') {
+      document.getElementById('model-hint').textContent = '(点击检测按钮自动发现已加载模型)';
+    } else {
+      document.getElementById('model-hint').textContent = '(点击检测按钮列出已安装模型)';
+    }
+  } else {
+    detectBtn.style.display = 'none';
+    modelSelect.style.display = 'none';
+    document.getElementById('model-hint').textContent = '';
+  }
+
   // 更新模型默认值
-  const models = {
-    ollama: 'qwen3:4b',
-    deepseek: 'deepseek-chat',
-    qwen: 'qwen-plus',
-    openai: 'gpt-4o-mini',
-    zhipu: 'glm-4-flash',
-  };
   const modelEl = document.getElementById('ai_model');
   if (modelEl && !modelEl.dataset.userModified) {
-    modelEl.value = models[provider] || '';
+    modelEl.value = DEFAULT_MODELS[provider] || '';
+  }
+}
+
+async function detectModels() {
+  const provider = document.getElementById('ai_provider').value;
+  const modelSelect = document.getElementById('ai_model_select');
+  const hint = document.getElementById('model-hint');
+
+  hint.textContent = '检测中...';
+  modelSelect.style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/ai/models/' + provider);
+    const data = await resp.json();
+    if (data.ok && data.models && data.models.length > 0) {
+      detectedModels = data.models;
+      modelSelect.innerHTML = '<option value="">-- 选择模型 --</option>' +
+        data.models.map(function(m) {
+          return '<option value="' + m.id + '">' + m.label + '</option>';
+        }).join('');
+      modelSelect.style.display = '';
+      hint.textContent = '检测到 ' + data.models.length + ' 个模型';
+
+      // 如果当前模型为空，自动选第一个
+      const currentModel = document.getElementById('ai_model').value;
+      if (!currentModel && data.models.length > 0) {
+        document.getElementById('ai_model').value = data.models[0].id;
+      }
+    } else {
+      hint.textContent = '未检测到模型，请确认服务已启动';
+      detectedModels = [];
+    }
+  } catch(e) {
+    hint.textContent = '检测失败: ' + e.message;
+    detectedModels = [];
+  }
+}
+
+function selectDetectedModel() {
+  const modelSelect = document.getElementById('ai_model_select');
+  const selected = modelSelect.value;
+  if (selected) {
+    document.getElementById('ai_model').value = selected;
+    document.getElementById('ai_model').dataset.userModified = '1';
   }
 }
 
@@ -595,8 +680,9 @@ async function saveAIConfig() {
   const apiKey = document.getElementById('ai_key').value;
   const payload = {
     active_provider: provider,
-    providers: { [provider]: { model } }
+    providers: {}
   };
+  payload.providers[provider] = { model: model };
   if (apiKey) payload.providers[provider].api_key = apiKey;
   try {
     await fetch('/api/ai/config', {
@@ -612,48 +698,49 @@ async function testAI() {
   const resultEl = document.getElementById('ai-test-result');
   resultEl.className = 'ai-status pending';
   resultEl.textContent = '测试中...';
-  // 先保存
   await saveAIConfig();
   try {
     const resp = await fetch('/api/ai/test', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ provider })
+      body: JSON.stringify({ provider: provider })
     });
     const data = await resp.json();
     if (data.ok) {
       resultEl.className = 'ai-status ok';
       resultEl.textContent = '✅ 连接成功';
-      log(`AI 测试通过: ${provider}`, 'ok');
+      log('AI 测试通过: ' + provider, 'ok');
     } else {
       resultEl.className = 'ai-status fail';
       resultEl.textContent = '❌ 失败';
-      log(`AI 测试失败: ${data.error}`, 'fail');
+      log('AI 测试失败: ' + (data.error || '未知错误'), 'fail');
     }
   } catch(e) {
     resultEl.className = 'ai-status fail';
     resultEl.textContent = '❌ 错误';
+    log('AI 测试异常: ' + e.message, 'fail');
   }
 }
 
-// ── 模式切换 ──
+// -- 模式切换 --
 function toggleMode() {
   const mode = document.getElementById('mode').value;
   document.getElementById('single-mode').style.display = mode === 'single' ? '' : 'none';
   document.getElementById('batch-mode').style.display = mode === 'batch' ? '' : 'none';
 }
 
-// ── 日志 ──
-function log(msg, type='info') {
+// -- 日志 --
+function log(msg, type) {
+  type = type || 'info';
   const area = document.getElementById('log-area');
   const div = document.createElement('div');
   div.className = type;
   const time = new Date().toLocaleTimeString('zh-CN');
-  div.textContent = `[${time}] ${msg}`;
+  div.textContent = '[' + time + '] ' + msg;
   area.appendChild(div);
   area.scrollTop = area.scrollHeight;
 }
 
-// ── 运行分析 ──
+// -- 运行分析 --
 async function runAnalysis() {
   const mode = document.getElementById('mode').value;
   const useLlm = document.getElementById('use_llm').value === '1';
@@ -663,7 +750,7 @@ async function runAnalysis() {
 
   if (platforms.length === 0) { log('请至少选择一个数据源平台', 'fail'); return; }
 
-  let payload = { mode, use_llm: useLlm, ai_provider: aiProvider, platforms, filter_emotion };
+  let payload = { mode: mode, use_llm: useLlm, ai_provider: aiProvider, platforms: platforms, filter_emotion: filterEmotion };
 
   if (mode === 'single') {
     payload.code = document.getElementById('stock_code').value;
@@ -677,7 +764,7 @@ async function runAnalysis() {
 
   document.getElementById('run-btn').disabled = true;
   document.getElementById('progress-bar-wrap').style.display = '';
-  log(`启动分析 | AI: ${aiProvider} | 平台: ${platforms.length}个 | 情绪过滤: ${filterEmotion ? '是' : '否'}`, 'info');
+  log('启动分析 | AI: ' + aiProvider + ' | 平台: ' + platforms.length + '个 | 情绪过滤: ' + (filterEmotion ? '是' : '否'), 'info');
 
   try {
     const resp = await fetch('/api/run', {
@@ -687,7 +774,7 @@ async function runAnalysis() {
     const data = await resp.json();
     if (data.ok) {
       runId = data.run_id;
-      log(`任务已创建: ${runId}`, 'info');
+      log('任务已创建: ' + runId, 'info');
       startPolling();
     } else {
       log('启动失败: ' + data.error, 'fail');
@@ -701,16 +788,16 @@ async function runAnalysis() {
 
 function stopAnalysis() {
   if (runId) {
-    fetch(`/api/stop/${runId}`, {method: 'POST'});
+    fetch('/api/stop/' + runId, {method: 'POST'});
     log('停止请求已发送', 'warn');
   }
 }
 
 function startPolling() {
-  polling = setInterval(async () => {
+  polling = setInterval(async function() {
     if (!runId) return;
     try {
-      const resp = await fetch(`/api/status/${runId}`);
+      const resp = await fetch('/api/status/' + runId);
       const data = await resp.json();
       if (data.total > 0) {
         const pct = (data.done / data.total * 100).toFixed(0);
@@ -736,21 +823,22 @@ function startPolling() {
       if (data.results && data.results.length > 0) {
         const area = document.getElementById('results-area');
         area.innerHTML = '';
-        data.results.forEach(r => {
+        data.results.forEach(function(r) {
           const div = document.createElement('div');
           div.className = 'result-item';
           let actions = '';
           if (r.code) {
-            actions += ` <a class="file-link" href="javascript:openPreview('${r.code}','${r.name.replace(/'/g,"")}"')" style="cursor:pointer">👁 预览</a>`;
+            const safeName = String(r.name || '').replace(/'/g, '');
+            actions += ' <a class="file-link" href="javascript:openPreview(\'' + r.code + '\',\'' + safeName + '\')" style="cursor:pointer">👁 预览</a>';
           }
           if (r.docx) {
-            actions += ` <a class="file-link" href="/download/${r.docx}" download>📥 Word</a>`;
+            actions += ' <a class="file-link" href="/download/' + r.docx + '" download>📥 Word</a>';
           }
           if (r.xlsx) {
-            actions += ` <a class="file-link" href="/download/${r.xlsx}" download>📊 Excel</a>`;
+            actions += ' <a class="file-link" href="/download/' + r.xlsx + '" download>📊 Excel</a>';
           }
-          div.innerHTML = `<span class="name">${r.name} (${r.code})</span>` +
-            `<span class="status ${r.status}">${r.status === 'ok' ? '✅ 完成' : r.status === 'fail' ? '❌ 失败' : '⏳ 进行中'}</span>` +
+          div.innerHTML = '<span class="name">' + r.name + ' (' + r.code + ')</span>' +
+            '<span class="status ' + r.status + '">' + (r.status === 'ok' ? '✅ 完成' : r.status === 'fail' ? '❌ 失败' : '⏳ 进行中') + '</span>' +
             actions;
           area.appendChild(div);
         });
@@ -765,7 +853,7 @@ function startPolling() {
           const area = document.getElementById('results-area');
           const zipDiv = document.createElement('div');
           zipDiv.style.cssText = 'margin-top:12px; text-align:center; padding:12px; background:#23863620; border-radius:6px';
-          zipDiv.innerHTML = `<a class="file-link" href="/download/${data.zip}" download style="font-size:16px">📦 下载全部 (${data.done} 份)</a>`;
+          zipDiv.innerHTML = '<a class="file-link" href="/download/' + data.zip + '" download style="font-size:16px">📦 下载全部 (' + data.done + ' 份)</a>';
           area.appendChild(zipDiv);
         }
       }
@@ -773,26 +861,26 @@ function startPolling() {
   }, 1000);
 }
 
-// ── 预览功能 ──
+// -- 预览功能 --
 let previewCode = '';
 let previewName = '';
 
 async function openPreview(code, name) {
   previewCode = code;
   previewName = name || code;
-  document.getElementById('preview-title').textContent = `${previewName} (${code}) 分析预览`;
+  document.getElementById('preview-title').textContent = previewName + ' (' + code + ') 分析预览';
   document.getElementById('preview-modal').classList.add('show');
   document.getElementById('preview-body').innerHTML = '<div style="text-align:center;padding:40px;color:#8b949e">加载中...</div>';
   try {
-    const resp = await fetch(`/api/preview/${code}`);
+    const resp = await fetch('/api/preview/' + code);
     const result = await resp.json();
     if (result.ok) {
       renderPreview(result.data);
     } else {
-      document.getElementById('preview-body').innerHTML = `<div style="color:#f85149;padding:20px">${result.error}</div>`;
+      document.getElementById('preview-body').innerHTML = '<div style="color:#f85149;padding:20px">' + result.error + '</div>';
     }
   } catch(e) {
-    document.getElementById('preview-body').innerHTML = `<div style="color:#f85149;padding:20px">加载失败: ${e.message}</div>`;
+    document.getElementById('preview-body').innerHTML = '<div style="color:#f85149;padding:20px">加载失败: ' + e.message + '</div>';
   }
 }
 
@@ -802,17 +890,16 @@ function closePreview() {
 
 function downloadPreviewExcel() {
   if (previewCode) {
-    window.open(`/api/export/excel/${previewCode}`, '_blank');
+    window.open('/api/export/excel/' + previewCode, '_blank');
   }
 }
 
 function downloadPreviewDocx() {
   if (previewCode) {
-    // Find docx filename
-    fetch('/api/stocks').then(r => r.json()).then(data => {
-      const file = data.files.find(f => f.code === previewCode);
+    fetch('/api/stocks').then(function(r) { return r.json(); }).then(function(data) {
+      const file = data.files.find(function(f) { return f.code === previewCode; });
       if (file) {
-        window.open(`/download/${file.name}`, '_blank');
+        window.open('/download/' + file.name, '_blank');
       } else {
         log('未找到 Word 文件', 'fail');
       }
@@ -839,28 +926,28 @@ function renderPreview(data) {
   // Overview
   html += '<div class="preview-section active" id="tab-overview">';
   if (data.ads_total > 0) {
-    html += `<div class="callout-box warn">⚠️ 检出 ${data.ads_total} 条广告/软文内容，请审慎甄别</div>`;
+    html += '<div class="callout-box warn">⚠️ 检出 ' + data.ads_total + ' 条广告/软文内容，请审慎甄别</div>';
   } else {
-    html += `<div class="callout-box info">✅ 未检出显性广告内容</div>`;
+    html += '<div class="callout-box info">✅ 未检出显性广告内容</div>';
   }
   html += '<div style="margin:12px 0">';
   if (ks.start_date) {
-    html += `<div class="preview-stat"><div class="val">${ks.total_return > 0 ? '+' : ''}${ks.total_return}%</div><div class="lbl">区间涨幅</div></div>`;
-    html += `<div class="preview-stat"><div class="val">${ks.last_close}</div><div class="lbl">最新收盘</div></div>`;
-    html += `<div class="preview-stat"><div class="val">${ks.max_high}</div><div class="lbl">最高价</div></div>`;
-    html += `<div class="preview-stat"><div class="val">${ks.min_low}</div><div class="lbl">最低价</div></div>`;
-    html += `<div class="preview-stat"><div class="val">${ks.total_bars}</div><div class="lbl">交易日</div></div>`;
-    html += `<div class="preview-stat"><div class="val">${ks.big_move_days}</div><div class="lbl">大幅波动日(>5%)</div></div>`;
+    html += '<div class="preview-stat"><div class="val">' + (ks.total_return > 0 ? '+' : '') + ks.total_return + '%</div><div class="lbl">区间涨幅</div></div>';
+    html += '<div class="preview-stat"><div class="val">' + ks.last_close + '</div><div class="lbl">最新收盘</div></div>';
+    html += '<div class="preview-stat"><div class="val">' + ks.max_high + '</div><div class="lbl">最高价</div></div>';
+    html += '<div class="preview-stat"><div class="val">' + ks.min_low + '</div><div class="lbl">最低价</div></div>';
+    html += '<div class="preview-stat"><div class="val">' + ks.total_bars + '</div><div class="lbl">交易日</div></div>';
+    html += '<div class="preview-stat"><div class="val">' + ks.big_move_days + '</div><div class="lbl">大幅波动日(>5%)</div></div>';
   }
-  html += `<div class="preview-stat"><div class="val">${data.posts_total}</div><div class="lbl">帖子总数</div></div>`;
-  html += `<div class="preview-stat"><div class="val">${(data.reports||[]).length}</div><div class="lbl">研报</div></div>`;
+  html += '<div class="preview-stat"><div class="val">' + data.posts_total + '</div><div class="lbl">帖子总数</div></div>';
+  html += '<div class="preview-stat"><div class="val">' + (data.reports || []).length + '</div><div class="lbl">研报</div></div>';
   html += '</div>';
 
   // Source averages
   html += '<h3 style="font-size:13px;color:#58a6ff;margin-top:16px">来源可信度均值</h3><div>';
   for (let [src, avg] of Object.entries(data.source_avg || {})) {
     const cls = avg >= 0.7 ? 'high' : (avg >= 0.4 ? 'mid' : 'low');
-    html += `<span class="d-score ${cls}">${src}: ${avg}</span>`;
+    html += '<span class="d-score ' + cls + '">' + src + ': ' + avg + '</span>';
   }
   html += '</div>';
   html += '</div>';
@@ -868,7 +955,7 @@ function renderPreview(data) {
   // Chart
   html += '<div class="preview-section" id="tab-chart">';
   if (data.has_chart) {
-    html += `<img class="preview-chart" src="/api/chart/${data.code}?_t=${Date.now()}" alt="价格曲线" />`;
+    html += '<img class="preview-chart" src="/api/chart/' + data.code + '?_t=' + Date.now() + '" alt="价格曲线" />';
   } else {
     html += '<div style="color:#8b949e;text-align:center;padding:20px">无图表数据</div>';
   }
@@ -881,16 +968,16 @@ function renderPreview(data) {
     const d8 = p.D8 || {};
     const adCls = d8.is_ad ? ' ad-row' : '';
     const d8txt = d8.is_ad ? '⚠️' : '—';
-    html += `<tr class="${adCls}"><td>${p.id||''}</td><td>${p.source_type||''}</td>`;
+    html += '<tr class="' + adCls + '"><td>' + (p.id || '') + '</td><td>' + (p.source_type || '') + '</td>';
     for (let k of ['D1','D2','D3','D4','D5','D6','D7']) {
       const v = p[k] || 0;
       const c = v >= 0.7 ? 'high' : (v >= 0.4 ? 'mid' : 'low');
-      html += `<td><span class="d-score ${c}">${v.toFixed(2)}</span></td>`;
+      html += '<td><span class="d-score ' + c + '">' + v.toFixed(2) + '</span></td>';
     }
-    html += `<td>${d8txt}</td><td>${(p.avg_d||0).toFixed(2)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${(p.title||'').substring(0,40)}</td></tr>`;
+    html += '<td>' + d8txt + '</td><td>' + (p.avg_d || 0).toFixed(2) + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + (p.title || '').substring(0, 40) + '</td></tr>';
   }
   html += '</tbody></table>';
-  html += `<div style="font-size:11px;color:#8b949e;margin-top:8px">显示前 ${Math.min(50, data.posts_total)} 条 / 共 ${data.posts_total} 条</div>`;
+  html += '<div style="font-size:11px;color:#8b949e;margin-top:8px">显示前 ' + Math.min(50, data.posts_total) + ' 条 / 共 ' + data.posts_total + ' 条</div>';
   html += '</div>';
 
   // Segments
@@ -898,7 +985,7 @@ function renderPreview(data) {
   html += '<table class="preview-table"><thead><tr><th>波段</th><th>方向</th><th>起始日</th><th>结束日</th><th>起始价</th><th>结束价</th><th>涨跌幅</th><th>交易日</th></tr></thead><tbody>';
   for (let s of (data.segments || [])) {
     const color = s.direction === '涨' ? '#f85149' : '#3fb950';
-    html += `<tr><td>${s.id}</td><td style="color:${color}">${s.direction}</td><td>${s.start_date}</td><td>${s.end_date}</td><td>${s.start_price}</td><td>${s.end_price}</td><td style="color:${color};font-weight:bold">${s.pct > 0 ? '+' : ''}${s.pct}%</td><td>${s.bars}</td></tr>`;
+    html += '<tr><td>' + s.id + '</td><td style="color:' + color + '">' + s.direction + '</td><td>' + s.start_date + '</td><td>' + s.end_date + '</td><td>' + s.start_price + '</td><td>' + s.end_price + '</td><td style="color:' + color + ';font-weight:bold">' + (s.pct > 0 ? '+' : '') + s.pct + '%</td><td>' + s.bars + '</td></tr>';
   }
   html += '</tbody></table></div>';
 
@@ -907,26 +994,25 @@ function renderPreview(data) {
   if (data.llm) {
     const llm = data.llm;
     const stats = llm.stats || {};
-    html += `<div style="font-size:11px;color:#8b949e;margin-bottom:8px">模型: qwen3:4b | 耗时: ${(stats.duration_s||0).toFixed(1)}s | 速度: ${(stats.tps||0).toFixed(0)} tok/s</div>`;
-    if (llm.overall_assessment) html += `<p style="margin:8px 0">${llm.overall_assessment}</p>`;
+    html += '<div style="font-size:11px;color:#8b949e;margin-bottom:8px">模型: ' + (stats.model || '?') + ' | 耗时: ' + (stats.duration_s || 0).toFixed(1) + 's | 速度: ' + (stats.tps || 0).toFixed(0) + ' tok/s</div>';
+    if (llm.overall_assessment) html += '<p style="margin:8px 0">' + llm.overall_assessment + '</p>';
     if (llm.key_risks && llm.key_risks.length) {
       html += '<div style="color:#f85149;font-size:13px;margin:8px 0">⚠️ 关键风险：</div>';
-      llm.key_risks.forEach(r => html += `<div style="padding:2px 0 2px 16px;font-size:12px">• ${r}</div>`);
+      llm.key_risks.forEach(function(r) { html += '<div style="padding:2px 0 2px 16px;font-size:12px">• ' + r + '</div>'; });
     }
     if (llm.catalysts && llm.catalysts.length) {
       html += '<div style="color:#3fb950;font-size:13px;margin:8px 0">✅ 催化剂：</div>';
-      llm.catalysts.forEach(c => html += `<div style="padding:2px 0 2px 16px;font-size:12px">• ${c}</div>`);
+      llm.catalysts.forEach(function(c) { html += '<div style="padding:2px 0 2px 16px;font-size:12px">• ' + c + '</div>'; });
     }
     if (llm.ad_warning) {
       const isAd = !llm.ad_warning.includes('未检测') && !llm.ad_warning.startsWith('无');
-      html += `<div class="callout-box ${isAd ? 'warn' : 'info'}" style="margin:8px 0">${llm.ad_warning}</div>`;
+      html += '<div class="callout-box ' + (isAd ? 'warn' : 'info') + '" style="margin:8px 0">' + llm.ad_warning + '</div>';
     }
-    // D1-D8 LLM eval
     const dFields = [['d1_source','D1 信息来源'],['d2_facts','D2 事实核查'],['d3_predictions','D3 预测具体性'],['d4_timing','D4 时间框架'],['d5_reasoning','D5 推理质量'],['d6_consensus','D6 共识偏离'],['d7_emotion','D7 情绪偏置'],['d8_ads','D8 广告甄别']];
-    const llmRows = dFields.filter(([k]) => llm[k]).map(([k,label]) => [label, llm[k]]);
+    const llmRows = dFields.filter(function(f) { return llm[f[0]]; }).map(function(f) { return [f[1], llm[f[0]]]; });
     if (llmRows.length) {
       html += '<table class="preview-table"><thead><tr><th>维度</th><th>LLM评价</th></tr></thead><tbody>';
-      llmRows.forEach(([l,v]) => html += `<tr><td style="font-weight:bold">${l}</td><td>${v}</td></tr>`);
+      llmRows.forEach(function(r) { html += '<tr><td style="font-weight:bold">' + r[0] + '</td><td>' + r[1] + '</td></tr>'; });
       html += '</tbody></table>';
     }
   } else {
@@ -942,30 +1028,29 @@ function renderPreview(data) {
 
   // News & Reports
   html += '<div class="preview-section" id="tab-news">';
-  if ((data.reports||[]).length) {
+  if ((data.reports || []).length) {
     html += '<h3 style="font-size:13px;color:#58a6ff">研报 <span style="font-size:10px;color:#8b949e">(点击标题查看原始链接)</span></h3><table class="preview-table"><thead><tr><th>机构</th><th>评级</th><th>EPS26</th><th>PE26</th><th>标题</th></tr></thead><tbody>';
-    data.reports.forEach(r => {
+    data.reports.forEach(function(r) {
       const rurl = r.url || '';
-      const title = (r.title||'').substring(0,50);
-      const titleHtml = rurl ? `<a href="${rurl}" target="_blank" style="color:#58a6ff;text-decoration:none" title="打开研报来源">${title}</a>` : title;
-      html += `<tr><td>${r.org||''}</td><td>${r.rating||''}</td><td>${r.eps_2026||''}</td><td>${r.pe_2026||''}</td><td style="max-width:250px">${titleHtml}</td></tr>`;
+      const title = (r.title || '').substring(0, 50);
+      const titleHtml = rurl ? '<a href="' + rurl + '" target="_blank" style="color:#58a6ff;text-decoration:none" title="打开研报来源">' + title + '</a>' : title;
+      html += '<tr><td>' + (r.org || '') + '</td><td>' + (r.rating || '') + '</td><td>' + (r.eps_2026 || '') + '</td><td>' + (r.pe_2026 || '') + '</td><td style="max-width:250px">' + titleHtml + '</td></tr>';
     });
     html += '</tbody></table>';
   }
-  if ((data.news||[]).length) {
+  if ((data.news || []).length) {
     html += '<h3 style="font-size:13px;color:#58a6ff;margin-top:12px">新闻 <span style="font-size:10px;color:#8b949e">(点击标题查看原始链接)</span></h3>';
-    data.news.forEach(n => {
+    data.news.forEach(function(n) {
       const nurl = n.url || '';
-      const ntime = (n.time||'').substring(0,10);
-      const nsrc = (n.source||'').substring(0,8);
+      const ntime = (n.time || '').substring(0, 10);
+      const nsrc = (n.source || '').substring(0, 8);
       const ntitle = n.title || '';
-      const titleHtml = nurl ? `<a href="${nurl}" target="_blank" style="color:#58a6ff;text-decoration:none" title="打开新闻来源">${ntitle}</a>` : ntitle;
-      html += `<div style="padding:4px 0;border-bottom:1px solid #21262d;font-size:12px"><span style="color:#8b949e">${ntime}</span> <span style="color:#58a6ff">[${nsrc}]</span> ${titleHtml}</div>`;
+      const titleHtml = nurl ? '<a href="' + nurl + '" target="_blank" style="color:#58a6ff;text-decoration:none" title="打开新闻来源">' + ntitle + '</a>' : ntitle;
+      html += '<div style="padding:4px 0;border-bottom:1px solid #21262d;font-size:12px"><span style="color:#8b949e">' + ntime + '</span> <span style="color:#58a6ff">[' + nsrc + ']</span> ' + titleHtml + '</div>';
     });
   }
-  // Stock page link
   if (data.stock_url) {
-    html += `<div style="margin-top:12px;text-align:right"><a href="${data.stock_url}" target="_blank" style="color:#58a6ff;font-size:12px;text-decoration:none">↗ 东方财富个股页</a></div>`;
+    html += '<div style="margin-top:12px;text-align:right"><a href="' + data.stock_url + '" target="_blank" style="color:#58a6ff;font-size:12px;text-decoration:none">↗ 东方财富个股页</a></div>';
   }
   html += '</div>';
 
@@ -973,21 +1058,21 @@ function renderPreview(data) {
 }
 
 function switchPreviewTab(tab, evt) {
-  document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.preview-section').forEach(s => s.classList.remove('active'));
-  evt.target.classList.add('active');
-  document.getElementById('tab-' + tab).classList.add('active');
-  // 技术指标标签页异步加载
+  document.querySelectorAll('.preview-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.preview-section').forEach(function(s) { s.classList.remove('active'); });
+  if (evt && evt.target) evt.target.classList.add('active');
+  const section = document.getElementById('tab-' + tab);
+  if (section) section.classList.add('active');
   if (tab === 'technical' && previewCode) {
     loadTechnicalData();
   }
 }
 
-// ── 行业对比 ──
+// -- 行业对比 --
 let industryStocks = [];
 let selectedIndustryStocks = new Set();
 
-// ── 技术指标加载 ──
+// -- 技术指标加载 --
 async function loadTechnicalData() {
   if (!previewCode) return;
   const loading = document.getElementById('tech-loading');
@@ -996,74 +1081,70 @@ async function loadTechnicalData() {
   loading.style.display = '';
   content.style.display = 'none';
   try {
-    const resp = await fetch(`/api/technical/${previewCode}?_v=24`);
+    const resp = await fetch('/api/technical/' + previewCode + '?_v=25');
     const data = await resp.json();
     if (data.ok) {
       const d = data.data;
       const inds = d.indicators || {};
       let html = '';
 
-      // D9 评分卡片
       if (d.d9_score) {
         const d9 = d.d9_score;
         const d9c = d9.score >= 0.7 ? '#3fb950' : (d9.score >= 0.4 ? '#d29922' : '#f85149');
-        html += `<div style="background:#21262d;border-radius:8px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:16px">`;
-        html += `<div style="font-size:36px;font-weight:bold;color:${d9c}">${(d9.score*100).toFixed(0)}</div>`;
-        html += `<div><div style="font-size:14px;font-weight:bold;color:#58a6ff">D9 技术信号评分</div><div style="font-size:12px;color:#c9d1d9">${d9.summary}</div></div>`;
-        html += `</div>`;
+        html += '<div style="background:#21262d;border-radius:8px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:16px">';
+        html += '<div style="font-size:36px;font-weight:bold;color:' + d9c + '">' + (d9.score * 100).toFixed(0) + '</div>';
+        html += '<div><div style="font-size:14px;font-weight:bold;color:#58a6ff">D9 技术信号评分</div><div style="font-size:12px;color:#c9d1d9">' + d9.summary + '</div></div>';
+        html += '</div>';
 
         if (d9.details) {
           const dt = d9.details;
           html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">';
-          if (dt.MACD) html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.MACD.DIF} ${dt.MACD.DEA}</div><div class="lbl">MACD(DIF/DEA)</div></div>`;
-          if (dt.KDJ) html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.KDJ.K} ${dt.KDJ.D} ${dt.KDJ.J}</div><div class="lbl">KDJ(K/D/J)</div></div>`;
-          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.RSI6||'-'}</div><div class="lbl">RSI(6)</div></div>`;
-          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.RSI12||'-'}</div><div class="lbl">RSI(12)</div></div>`;
-          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.RSI24||'-'}</div><div class="lbl">RSI(24)</div></div>`;
-          html += `<div class="preview-stat"><div class="val" style="font-size:14px">${dt.buy_patterns}买 / ${dt.sell_patterns}卖</div><div class="lbl">近20日形态</div></div>`;
+          if (dt.MACD) html += '<div class="preview-stat"><div class="val" style="font-size:14px">' + dt.MACD.DIF + ' ' + dt.MACD.DEA + '</div><div class="lbl">MACD(DIF/DEA)</div></div>';
+          if (dt.KDJ) html += '<div class="preview-stat"><div class="val" style="font-size:14px">' + dt.KDJ.K + ' ' + dt.KDJ.D + ' ' + dt.KDJ.J + '</div><div class="lbl">KDJ(K/D/J)</div></div>';
+          html += '<div class="preview-stat"><div class="val" style="font-size:14px">' + (dt.RSI6 || '-') + '</div><div class="lbl">RSI(6)</div></div>';
+          html += '<div class="preview-stat"><div class="val" style="font-size:14px">' + (dt.RSI12 || '-') + '</div><div class="lbl">RSI(12)</div></div>';
+          html += '<div class="preview-stat"><div class="val" style="font-size:14px">' + (dt.RSI24 || '-') + '</div><div class="lbl">RSI(24)</div></div>';
+          html += '<div class="preview-stat"><div class="val" style="font-size:14px">' + dt.buy_patterns + '买 / ' + dt.sell_patterns + '卖</div><div class="lbl">近20日形态</div></div>';
           html += '</div>';
         }
       }
 
-      // 指标详细值
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
       for (let [name, ind] of Object.entries(inds)) {
         if (!ind) continue;
-        html += `<div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px">`;
-        html += `<div style="font-size:13px;font-weight:bold;color:#58a6ff;margin-bottom:6px">${name}</div>`;
-        html += `<div style="font-size:11px;color:#3fb950">${ind.status || ''}</div>`;
+        html += '<div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px">';
+        html += '<div style="font-size:13px;font-weight:bold;color:#58a6ff;margin-bottom:6px">' + name + '</div>';
+        html += '<div style="font-size:11px;color:#3fb950">' + (ind.status || '') + '</div>';
         if (ind.latest && typeof ind.latest === 'object') {
           for (let [k, v] of Object.entries(ind.latest)) {
-            html += `<div style="font-size:11px;color:#8b949e">${k}: ${typeof v === 'number' ? v.toFixed(2) : v}</div>`;
+            html += '<div style="font-size:11px;color:#8b949e">' + k + ': ' + (typeof v === 'number' ? v.toFixed(2) : v) + '</div>';
           }
         } else if (ind.latest !== undefined && ind.latest !== null) {
-          html += `<div style="font-size:14px;font-weight:bold;color:#c9d1d9">${typeof ind.latest === 'number' ? ind.latest.toFixed(2) : ind.latest}</div>`;
+          html += '<div style="font-size:14px;font-weight:bold;color:#c9d1d9">' + (typeof ind.latest === 'number' ? ind.latest.toFixed(2) : ind.latest) + '</div>';
         }
         html += '</div>';
       }
       html += '</div>';
 
-      // 最近形态
       if ((d.recent_patterns || []).length) {
         html += '<h3 style="font-size:13px;color:#58a6ff;margin-top:16px">近20日K线形态信号</h3><div style="display:flex;flex-wrap:wrap;gap:6px">';
-        d.recent_patterns.forEach(p => {
+        d.recent_patterns.forEach(function(p) {
           const c = p.signal === 1 ? '#3fb950' : (p.signal === -1 ? '#f85149' : '#8b949e');
-          html += `<span style="background:#21262d;border-radius:4px;padding:4px 10px;font-size:11px;color:${c}">${p.name}(${p.date})</span>`;
+          html += '<span style="background:#21262d;border-radius:4px;padding:4px 10px;font-size:11px;color:' + c + '">' + p.name + '(' + p.date + ')</span>';
         });
         html += '</div>';
       }
 
-      // 技术图表
-      html += `<div style="margin-top:16px"><img src="/api/chart/${previewCode}?_v=24" style="width:100%;border-radius:8px;border:1px solid #30363d" onerror="this.style.display='none'" /></div>`;
+      html += '<div style="margin-top:16px"><img src="/api/chart/' + previewCode + '?_v=25" style="width:100%;border-radius:8px;border:1px solid #30363d" onerror="this.style.display=\'none\'" /></div>';
 
       content.innerHTML = html;
       content.style.display = '';
       loading.style.display = 'none';
     } else {
-      loading.innerHTML = `<div style="color:#f85149">加载失败: ${data.error}</div>`;
+      loading.innerHTML = '<div style="color:#f85149">加载失败: ' + data.error + '</div>';
     }
   } catch(e) {
-    loading.innerHTML = `<div style="color:#f85149">加载失败: ${e.message}</div>`;
+    loading.innerHTML = '<div style="color:#f85149">加载失败: ' + e.message + '</div>';
   }
 }
 
@@ -1085,14 +1166,14 @@ function renderIndustryStocks() {
     grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:10px">无已分析股票</div>';
     return;
   }
-  grid.innerHTML = industryStocks.map(s => {
+  grid.innerHTML = industryStocks.map(function(s) {
     const ret = s.total_return || 0;
     const color = ret >= 0 ? '#f85149' : '#3fb950';
-    return `<div class="industry-stock-item" onclick="toggleIndustryStock('${s.code}')" data-code="${s.code}">
-      <input type="checkbox" ${selectedIndustryStocks.has(s.code) ? 'checked' : ''} onchange="toggleIndustryStock('${s.code}')">
-      <span>${s.name}</span>
-      <span style="margin-left:auto;color:${color};font-weight:bold">${ret > 0 ? '+' : ''}${ret}%</span>
-    </div>`;
+    return '<div class="industry-stock-item" onclick="toggleIndustryStock(\'' + s.code + '\')" data-code="' + s.code + '">' +
+      '<input type="checkbox" ' + (selectedIndustryStocks.has(s.code) ? 'checked' : '') + ' onchange="toggleIndustryStock(\'' + s.code + '\')">' +
+      '<span>' + s.name + '</span>' +
+      '<span style="margin-left:auto;color:' + color + ';font-weight:bold">' + (ret > 0 ? '+' : '') + ret + '%</span>' +
+    '</div>';
   }).join('');
 }
 
@@ -1102,8 +1183,7 @@ function toggleIndustryStock(code) {
   } else {
     selectedIndustryStocks.add(code);
   }
-  // Update visual
-  document.querySelectorAll('.industry-stock-item').forEach(el => {
+  document.querySelectorAll('.industry-stock-item').forEach(function(el) {
     const cb = el.querySelector('input');
     if (el.dataset.code === code) {
       cb.checked = selectedIndustryStocks.has(code);
@@ -1118,16 +1198,16 @@ async function generateIndustryChart() {
     log('请至少选择 2 只股票进行对比', 'warn');
     return;
   }
-  log(`生成行业对比图 (${codes.length} 只股票)...`, 'info');
+  log('生成行业对比图 (' + codes.length + ' 只股票)...', 'info');
   try {
     const resp = await fetch('/api/industry/chart', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ industry: '自定义对比', codes })
+      body: JSON.stringify({ industry: '自定义对比', codes: codes })
     });
     const data = await resp.json();
     if (data.ok) {
       document.getElementById('industry-chart-area').style.display = '';
-      document.getElementById('industry-chart-img').src = `/download/${data.chart}?_t=${Date.now()}`;
+      document.getElementById('industry-chart-img').src = '/download/' + data.chart + '?_t=' + Date.now();
       log('行业对比图已生成', 'ok');
     } else {
       log('生成失败: ' + data.error, 'fail');
@@ -1135,7 +1215,7 @@ async function generateIndustryChart() {
   } catch(e) { log('请求失败: ' + e.message, 'fail'); }
 }
 
-// ── 启动 ──
+// -- 启动 --
 init();
 </script>
 </body>

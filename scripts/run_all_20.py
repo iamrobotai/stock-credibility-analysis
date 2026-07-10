@@ -7,6 +7,9 @@ run_all_20.py — 20 行业批量执行器
 import json, os, sys, time, subprocess
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+# 支持目录重组：从子目录中找到项目根
+while not os.path.exists(os.path.join(BASE, "data")) and os.path.dirname(BASE) != BASE:
+    BASE = os.path.dirname(BASE)
 PY = r"C:\Users\outzb\.workbuddy\binaries\python\envs\default\Scripts\python.exe"
 
 # ===================== 20 行业定义 =====================

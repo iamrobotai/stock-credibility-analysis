@@ -12,7 +12,12 @@ import json, os, time, sys
 from pathlib import Path
 import requests
 
-DATA_DIR = Path(__file__).parent / "data"
+# 支持目录重组：从子目录中找到项目根
+_PROJECT_ROOT = Path(__file__).resolve().parent
+while _PROJECT_ROOT.name and not (_PROJECT_ROOT / "data").exists() and _PROJECT_ROOT.parent != _PROJECT_ROOT:
+    _PROJECT_ROOT = _PROJECT_ROOT.parent
+
+DATA_DIR = _PROJECT_ROOT / "data"
 CACHE_FILE = DATA_DIR / "stock_cache.json"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 

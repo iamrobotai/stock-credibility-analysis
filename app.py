@@ -1,7 +1,8 @@
 """
-股票可信度分析系统 - Flask Web 应用 v2.0
+股票可信度分析系统 - Flask Web 应用 v2.5
 ===================================
-支持: 股票代码自动解析 / 多 AI 提供商 / 数据源平台选择 / 情绪帖过滤
+支持: 股票代码自动解析 / 多 AI 提供商 (含 LM Studio) / 数据源平台选择 / 情绪帖过滤
+      14种技术指标 / 50+K线形态 / 在线预览 / Excel导出 / 行业叠加图
 
 启动: python app.py
 访问: http://localhost:5000
@@ -12,10 +13,18 @@ from datetime import datetime
 
 from flask import Flask, render_template, jsonify, request, send_file, Response
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).resolve().parent
+
+# 支持目录重组：将子目录加入 sys.path
+for _subdir in ["core", "ai", "export", "scripts"]:
+    _subdir_path = BASE_DIR / _subdir
+    if _subdir_path.exists():
+        sys.path.insert(0, str(_subdir_path))
+
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR = BASE_DIR
+OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 app = Flask(__name__, template_folder=str(BASE_DIR / "templates"))
 
@@ -62,7 +71,6 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
     name = stock.get("name", "")
     industry = stock.get("industry", "")
 
-    # 如果名称为空，自动解析
     if not name:
         try:
             from stock_resolver import resolve
@@ -86,7 +94,6 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
         collect(code, name, outdir=str(DATA_DIR),
                 platforms=platforms, filter_emotion=filter_emotion)
 
-        # 统计采集结果
         raw_path = DATA_DIR / f"{code}_raw.json"
         if raw_path.exists():
             with open(raw_path, encoding="utf-8") as f:
@@ -113,7 +120,6 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
             with open(scored_path, encoding="utf-8") as f:
                 scored_data = json.load(f)
             ad_count = sum(1 for p in scored_data.get("posts", []) if p.get("D8", {}).get("is_ad"))
-            # 添加 D9 技术评分
             try:
                 raw_path = DATA_DIR / f"{code}_raw.json"
                 raw = json.load(open(raw_path, encoding="utf-8"))
@@ -144,7 +150,6 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
         docx_name = f"{safe_name}_{code}_完整分析.docx"
         docx_path = OUTPUT_DIR / docx_name
 
-        # Excel 导出
         xlsx_name = None
         try:
             from gen_excel import generate as gen_xlsx
@@ -168,7 +173,7 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
 
     except Exception as e:
         result["status"] = "fail"
-        state.log(f"[{name}] ❌ 失败: {str(e)[:100]}", "fail")
+        state.log(f"[{name}] 失败: {str(e)[:100]}", "fail")
         traceback.print_exc()
         state.fail += 1
 
@@ -203,7 +208,6 @@ def run_batch_task(state):
         platforms = state.payload.get("platforms")
         filter_emotion = state.payload.get("filter_emotion", True)
 
-        # 如果未指定 platforms，使用默认全平台
         if platforms is None:
             from data_collector import DEFAULT_PLATFORMS
             platforms = DEFAULT_PLATFORMS
@@ -218,7 +222,6 @@ def run_batch_task(state):
             state.log(f"[{i+1}/{state.total}] {stock.get('name', stock['code'])} ({stock['code']})", "info")
             run_single(stock, state, use_llm, ai_provider, ai_config, platforms, filter_emotion)
 
-        # 打包 zip
         if state.success > 1:
             state.log("打包 ZIP...", "info")
             import zipfile
@@ -248,7 +251,7 @@ def run_batch_task(state):
         traceback.print_exc()
 
 
-# ── API 路由 ──
+# -- API 路由 --
 
 @app.route("/")
 def index():
@@ -257,11 +260,27 @@ def index():
 
 @app.route("/api/hot")
 def api_hot():
-    """获取实时热门股票与行业 (简化版，无线程嵌套)"""
+    """获取实时热门股票与行业 (带超时保护)"""
     try:
         from hot_stocks import get_all_hot
-        data = get_all_hot()
-        return jsonify({"ok": True, "data": data})
+        # 用线程+超时防止 push2 API 卡死
+        result = [None]
+        def _fetch():
+            result[0] = get_all_hot()
+        t = threading.Thread(target=_fetch, daemon=True)
+        t.start()
+        t.join(timeout=10)
+        if result[0]:
+            return jsonify({"ok": True, "data": result[0]})
+        return jsonify({
+            "ok": True,
+            "data": {
+                "stocks": [],
+                "industries": [],
+                "concepts": [],
+                "update_time": "数据源超时 (非交易时段或网络问题)",
+            }
+        })
     except Exception as e:
         return jsonify({
             "ok": True,
@@ -269,14 +288,14 @@ def api_hot():
                 "stocks": [],
                 "industries": [],
                 "concepts": [],
-                "update_time": f"API限流: {str(e)[:40]}",
+                "update_time": f"API异常: {str(e)[:40]}",
             }
         })
 
 
 @app.route("/api/resolve/<code>")
 def api_resolve(code):
-    """股票代码自动解析 → {name, industry}"""
+    """股票代码自动解析 -> {name, industry}"""
     try:
         from stock_resolver import resolve
         info = resolve(code)
@@ -306,22 +325,20 @@ def ai_providers():
 @app.route("/api/ai/config", methods=["GET", "POST"])
 def ai_config():
     """获取/设置 AI 配置"""
-    from ai_provider import load_config, save_config
+    from ai_provider import load_config, save_config, _LOCAL_PROVIDERS
     if request.method == "GET":
         cfg = load_config()
-        # 隐藏 api_key 只返回是否已设置
         safe = {"active_provider": cfg.get("active_provider"), "providers": {}}
         for k, v in cfg.get("providers", {}).items():
             safe["providers"][k] = {
                 "model": v.get("model", ""),
                 "label": v.get("label", k),
                 "has_key": bool(v.get("api_key")),
-                "needs_key": k != "ollama",
+                "needs_key": k not in _LOCAL_PROVIDERS,
                 "url": v.get("url", ""),
             }
         return jsonify(safe)
 
-    # POST: 更新配置
     data = request.json
     cfg = load_config()
     if "active_provider" in data:
@@ -345,6 +362,20 @@ def ai_test():
     provider = data.get("provider")
     result = test_provider(provider)
     return jsonify(result)
+
+
+@app.route("/api/ai/models/<provider>")
+def ai_models(provider):
+    """获取本地 AI 提供商的可用模型列表 (自动检测)"""
+    from ai_provider import list_models
+    try:
+        models = list_models(provider)
+        if models:
+            return jsonify({"ok": True, "models": models})
+        else:
+            return jsonify({"ok": False, "error": "未检测到模型，请确认服务已启动"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
 
 
 @app.route("/api/run", methods=["POST"])
@@ -389,7 +420,6 @@ def api_stocks():
     files = []
     for f in docx_files[:100]:
         name = os.path.basename(f)
-        # Extract code from filename
         parts = name.rsplit("_", 2)
         code = parts[-2] if len(parts) >= 2 else ""
         xlsx_name = name.replace("_完整分析.docx", "_分析.xlsx")
@@ -423,7 +453,6 @@ def api_preview(code):
         news = raw.get("news", [])
         reports = raw.get("reports", [])
 
-        # K线摘要
         kline_summary = {}
         if kline:
             last = kline[-1]
@@ -431,7 +460,6 @@ def api_preview(code):
             total_ret = (last["close"] - first["close"]) / first["close"] * 100
             highs = [b["high"] for b in kline]
             lows = [b["low"] for b in kline]
-            # 计算日涨跌幅 >5% 的天数
             big_days = 0
             for i in range(1, len(kline)):
                 prev = kline[i - 1]["close"]
@@ -446,17 +474,14 @@ def api_preview(code):
                 "big_move_days": big_days,
             }
 
-        # 来源可信度均值
         by_type = {}
         for p in posts:
             t = p.get("source_type", "?")
             by_type.setdefault(t, []).append(p.get("avg_d", 0))
         source_avg = {t: round(sum(s) / len(s), 2) for t, s in by_type.items()}
 
-        # 广告帖
         ads = [p for p in posts if p.get("D8", {}).get("is_ad")]
 
-        # LLM 分析
         llm_analysis = None
         if llm_data.get("success") and llm_data.get("analysis"):
             llm_analysis = llm_data["analysis"]
@@ -490,10 +515,8 @@ def api_preview(code):
 @app.route("/api/chart/<code>")
 def api_chart(code):
     """返回图表 PNG"""
-    # 先尝试已有图表
     chart_path = DATA_DIR / f"{code}_chart.png"
     if not chart_path.exists():
-        # 动态生成
         raw_path = DATA_DIR / f"{code}_raw.json"
         seg_path = DATA_DIR / f"{code}_segments.json"
         if raw_path.exists():
@@ -514,7 +537,6 @@ def api_export_excel(code):
     """生成并下载 Excel"""
     try:
         from gen_excel import generate as gen_xlsx
-        # 从 scored 或 raw 获取名称
         name = code
         industry = ""
         scored_path = DATA_DIR / f"{code}_scored.json"
@@ -569,7 +591,6 @@ def api_industry_chart():
 def api_industry_preview():
     """行业对比预览：返回所有已分析股票列表"""
     try:
-        # 扫描 data 目录中的 raw 文件
         raw_files = sorted(DATA_DIR.glob("*_raw.json"), key=os.path.getmtime, reverse=True)
         stocks = []
         for f in raw_files[:200]:
@@ -612,7 +633,6 @@ def api_technical(code):
         lows = [b["low"] for b in kline]
         volumes = [b.get("volume", 0) for b in kline]
 
-        # 趋势 (最近50根K线)
         tail = min(100, len(kline))
         kline_tail = kline[-tail:]
         closes_tail = closes[-tail:]
@@ -645,16 +665,17 @@ def api_technical(code):
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("股票可信度分析系统 v2.4 - 本地版")
+    print("股票可信度分析系统 v2.5 - 本地版")
     print("=" * 50)
     print(f"数据目录: {DATA_DIR}")
     print(f"输出目录: {OUTPUT_DIR}")
     print()
     print("新功能:")
-    print("  - 14种技术指标 (MACD/KDJ/RSI/BOLL/CCI/WR/ATR等)")
-    print("  - 50+K线形态识别 (锤头/吞噬/晨星/三白兵等)")
-    print("  - D9 技术信号评分 (综合指标+形态)")
-    print("  - 在线预览（6 Tab + 技术指标异步加载）")
+    print("  - LM Studio 本地 AI 支持 (自动检测已加载模型)")
+    print("  - 14种技术指标 + 50+K线形态识别")
+    print("  - D9 技术信号评分")
+    print("  - 在线预览 (7 Tab)")
+    print("  - Excel 导出 / 行业叠加图")
     print()
     print("访问: http://localhost:5000")
     print("=" * 50)

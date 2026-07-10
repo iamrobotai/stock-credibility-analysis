@@ -1,0 +1,45 @@
+{
+  "active_provider": "ollama",
+  "providers": {
+    "ollama": {
+      "url": "http://localhost:11434",
+      "model": "qwen3:4b",
+      "label": "Ollama (本地)",
+      "note": "零 token，需本地安装 Ollama"
+    },
+    "lmstudio": {
+      "url": "http://localhost:1234/v1",
+      "model": "",
+      "label": "LM Studio (本地)",
+      "note": "零 token，需本地安装 LM Studio 并启动 Server"
+    },
+    "deepseek": {
+      "api_key": "",
+      "model": "deepseek-chat",
+      "url": "https://api.deepseek.com/v1",
+      "label": "DeepSeek",
+      "note": "深度求索 API，性价比高"
+    },
+    "qwen": {
+      "api_key": "",
+      "model": "qwen-plus",
+      "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "label": "通义千问",
+      "note": "阿里 DashScope API"
+    },
+    "openai": {
+      "api_key": "",
+      "model": "gpt-4o-mini",
+      "url": "https://api.openai.com/v1",
+      "label": "OpenAI",
+      "note": "需海外网络"
+    },
+    "zhipu": {
+      "api_key": "",
+      "model": "glm-4-flash",
+      "url": "https://open.bigmodel.cn/api/paas/v4",
+      "label": "智谱 GLM",
+      "note": "清华系，免费额度多"
+    }
+  }
+}

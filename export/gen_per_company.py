@@ -12,6 +12,9 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+# 支持目录重组：从子目录中找到项目根
+while not os.path.exists(os.path.join(BASE, "data")) and os.path.dirname(BASE) != BASE:
+    BASE = os.path.dirname(BASE)
 VC = os.path.join(BASE, "value_chain.png")
 
 # ---------- 样式 / 字体 ----------
@@ -470,7 +473,7 @@ def build_doc(c):
 
     safe_name = c['name'].replace('/', '_').replace(' ', '')
     fn = f"{safe_name}_{c['code']}_分析.docx" if c['code'] != '—' else f"{safe_name}_分析.docx"
-    out = os.path.join(BASE, fn)
+    out = os.path.join(BASE, "output", fn)
     doc.save(out)
     return out
 

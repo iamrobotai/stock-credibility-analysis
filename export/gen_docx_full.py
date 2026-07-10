@@ -17,7 +17,12 @@ from gen_per_company import (
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+# 支持目录重组：从子目录中找到项目根
+while not os.path.exists(os.path.join(BASE, "data")) and os.path.dirname(BASE) != BASE:
+    BASE = os.path.dirname(BASE)
 DATADIR = os.path.join(BASE, "data")
+OUTDIR = os.path.join(BASE, "output")
+os.makedirs(OUTDIR, exist_ok=True)
 
 
 def _fmt_money(v):
@@ -329,7 +334,7 @@ def generate(code, name, industry="", fmatrix=None):
     # 保存
     safe_name = name.replace("/", "_").replace(" ", "")
     outname = f"{safe_name}_{code}_完整分析.docx"
-    outpath = os.path.join(BASE, outname)
+    outpath = os.path.join(OUTDIR, outname)
     doc.save(outpath)
     print(f"[docx] {outpath} ({os.path.getsize(outpath)//1024}KB)")
     return outpath

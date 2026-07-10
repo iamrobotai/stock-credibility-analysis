@@ -12,22 +12,28 @@ venv/
 .venv/
 env/
 
-# Data directories (runtime data, not source code)
+# Runtime data directory (generated analysis data)
 data/
-*.json.tmp
 
-# Output files (generated reports)
-*_完整分析.docx
-*_分析.docx
-*.zip
-*_chart.png
-*_segments.json
+# Output directory (generated reports)
+output/
+
+# Configs directory (generated pipeline configs)
+configs/pipeline_*_summary.json
+
+# Analysis docs (generated)
+docs/
+
+# Temporary JSON files
+*.json.tmp
 *_raw.json
 *_scored.json
 *_llm.json
 *_kline.json
-kline_*.json
-segments*.json
+*_segments.json
+*_chart.png
+*_tech_chart.png
+industry_*_chart.png
 
 # Config files with API keys
 ai_config.json
@@ -45,8 +51,11 @@ Thumbs.db
 # Logs
 *.log
 
-# Test files
-test_*.py
-debug_*.py
-probe_*.py
-warmup_*.py
+# Stock-credibility-team expert package
+stock-credibility-team.zip
+
+# Debug/test/probe scripts (not part of production code)
+scripts/debug_*.py
+scripts/probe_*.py
+scripts/test_*.py
+scripts/warmup_llm.py
