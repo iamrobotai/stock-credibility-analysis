@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>股票可信度分析系统 v2.5</title>
+<title>股票可信度分析系统 v2.6</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
@@ -158,8 +158,8 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 </head>
 <body>
 <div class="header">
-  <h1>📊 股票可信度分析系统 v2.5</h1>
-  <span class="badge">LM Studio · 指标 · 形态 · 预览</span>
+  <h1>📊 股票可信度分析系统 v2.6</h1>
+  <span class="badge">雪球 · 知乎 · 增量更新 · 浏览器抓取</span>
 </div>
 
 <div class="container">
@@ -273,6 +273,26 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
           <label for="filter_emotion">过滤情绪帖（减少股吧/淘股吧中的喊单帖）</label>
         </div>
         <div class="toggle-row">
+          <input type="checkbox" id="use_browser" checked>
+          <label for="use_browser">启用浏览器抓取（雪球讨论帖/知乎，需安装 Playwright）</label>
+          <button class="btn btn-sm btn-secondary" onclick="testBrowserFetch()" style="margin-left:8px">🔍 检测</button>
+          <span id="browser-test-result" class="ai-status pending" style="margin-left:4px">未检测</span>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="incremental_mode">
+          <label for="incremental_mode">增量更新（仅获取新数据，合并已有数据，不重复抓取）</label>
+          <button class="btn btn-sm btn-secondary" onclick="showIncrementalState()" style="margin-left:8px">📋 查看</button>
+        </div>
+        <div class="form-group" style="margin-top:10px">
+          <label>数据保存路径 <span style="color:#8b949e;font-size:11px">(默认: data/ 目录)</span></label>
+          <div style="display:flex; gap:8px">
+            <input type="text" id="data_savepath" placeholder="留空使用默认路径" value="" style="flex:1">
+            <button class="btn btn-sm btn-secondary" onclick="loadSavePath()">📂 加载</button>
+            <button class="btn btn-sm btn-secondary" onclick="setSavePath()">💾 设置</button>
+          </div>
+          <div id="savepath-hint" style="font-size:11px;color:#8b949e;margin-top:4px">点击「加载」查看当前路径</div>
+        </div>
+        <div class="toggle-row" style="margin-top:10px">
           <button class="btn btn-sm btn-secondary" onclick="selectAllPlatforms(true)">全选</button>
           <button class="btn btn-sm btn-secondary" onclick="selectAllPlatforms(false)">全不选</button>
           <button class="btn btn-sm btn-secondary" onclick="selectHighValue()">仅高价值</button>
@@ -747,10 +767,18 @@ async function runAnalysis() {
   const aiProvider = document.getElementById('ai_provider').value;
   const platforms = getSelectedPlatforms();
   const filterEmotion = document.getElementById('filter_emotion').checked;
+  const useBrowser = document.getElementById('use_browser').checked;
+  const incremental = document.getElementById('incremental_mode').checked;
+  const dataOutdir = document.getElementById('data_savepath').value.trim();
 
   if (platforms.length === 0) { log('请至少选择一个数据源平台', 'fail'); return; }
 
-  let payload = { mode: mode, use_llm: useLlm, ai_provider: aiProvider, platforms: platforms, filter_emotion: filterEmotion };
+  let payload = {
+    mode: mode, use_llm: useLlm, ai_provider: aiProvider,
+    platforms: platforms, filter_emotion: filterEmotion,
+    use_browser: useBrowser, incremental: incremental,
+  };
+  if (dataOutdir) payload.data_outdir = dataOutdir;
 
   if (mode === 'single') {
     payload.code = document.getElementById('stock_code').value;
@@ -764,7 +792,7 @@ async function runAnalysis() {
 
   document.getElementById('run-btn').disabled = true;
   document.getElementById('progress-bar-wrap').style.display = '';
-  log('启动分析 | AI: ' + aiProvider + ' | 平台: ' + platforms.length + '个 | 情绪过滤: ' + (filterEmotion ? '是' : '否'), 'info');
+  log('启动分析 | AI: ' + aiProvider + ' | 平台: ' + platforms.length + '个 | 情绪过滤: ' + (filterEmotion ? '是' : '否') + ' | 浏览器: ' + (useBrowser ? '是' : '否') + ' | 增量: ' + (incremental ? '是' : '否'), 'info');
 
   try {
     const resp = await fetch('/api/run', {
@@ -1213,6 +1241,95 @@ async function generateIndustryChart() {
       log('生成失败: ' + data.error, 'fail');
     }
   } catch(e) { log('请求失败: ' + e.message, 'fail'); }
+}
+
+// -- 数据管理 v2.6 --
+
+async function testBrowserFetch() {
+  const resultEl = document.getElementById('browser-test-result');
+  resultEl.className = 'ai-status pending';
+  resultEl.textContent = '检测中...';
+  try {
+    const resp = await fetch('/api/data/browser-test', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    const data = await resp.json();
+    if (data.available) {
+      resultEl.className = 'ai-status ok';
+      resultEl.textContent = '✅ 可用';
+      log('浏览器抓取可用 (Playwright)', 'ok');
+    } else {
+      resultEl.className = 'ai-status fail';
+      resultEl.textContent = '❌ 未安装';
+      log('Playwright 未安装: ' + data.message, 'warn');
+    }
+  } catch(e) {
+    resultEl.className = 'ai-status fail';
+    resultEl.textContent = '❌ 错误';
+    log('检测失败: ' + e.message, 'fail');
+  }
+}
+
+async function loadSavePath() {
+  try {
+    const resp = await fetch('/api/data/savepath');
+    const data = await resp.json();
+    if (data.ok) {
+      document.getElementById('savepath-hint').textContent = '数据目录: ' + data.data_dir + ' | 输出目录: ' + data.output_dir;
+      log('当前数据目录: ' + data.data_dir, 'info');
+    }
+  } catch(e) {
+    document.getElementById('savepath-hint').textContent = '加载失败: ' + e.message;
+  }
+}
+
+async function setSavePath() {
+  const path = document.getElementById('data_savepath').value.trim();
+  if (!path) {
+    log('请输入保存路径', 'warn');
+    return;
+  }
+  try {
+    const resp = await fetch('/api/data/savepath', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: path})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      log('保存路径已设置: ' + data.path, 'ok');
+      document.getElementById('savepath-hint').textContent = '已设置: ' + data.path;
+    } else {
+      log('设置失败: ' + data.error, 'fail');
+    }
+  } catch(e) {
+    log('设置失败: ' + e.message, 'fail');
+  }
+}
+
+async function showIncrementalState() {
+  try {
+    const resp = await fetch('/api/data/incremental');
+    const data = await resp.json();
+    if (data.ok) {
+      const summary = data.summary || {};
+      const codes = Object.keys(summary);
+      if (codes.length === 0) {
+        log('无增量更新记录', 'info');
+        return;
+      }
+      log('=== 增量更新状态 ===', 'info');
+      codes.forEach(function(code) {
+        const plats = summary[code];
+        const platNames = Object.keys(plats);
+        platNames.forEach(function(plat) {
+          const info = plats[plat];
+          log('  ' + code + ' | ' + plat + ' | 上次: ' + info.last_fetch + ' | 总计: ' + info.total_fetched + '条', 'info');
+        });
+      });
+    } else {
+      log('查询失败: ' + data.error, 'fail');
+    }
+  } catch(e) {
+    log('查询失败: ' + e.message, 'fail');
+  }
 }
 
 // -- 启动 --

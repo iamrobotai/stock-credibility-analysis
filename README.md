@@ -11,7 +11,10 @@
 | **实时热门推荐** | 东财热度榜 + 涨幅榜 + 主力净流入榜 + 行业涨幅排行，2 分钟自动刷新 |
 | **股票代码自动解析** | 输入代码 → 自动获取名称、行业（一级+二级）、地域 |
 | **多 AI 提供商** | Ollama / **LM Studio** (本地零Token) / DeepSeek / 通义千问 / OpenAI / 智谱GLM，统一接口自由切换，**自动检测已加载模型** |
-| **13 平台数据采集** | K线/新闻/研报/财务/公告/互动易/同花顺/资金流/龙虎榜/雪球/股吧/淘股吧/评论 |
+| **15 平台数据采集** | K线/新闻/研报/财务/公告/互动易/同花顺/资金流/龙虎榜/雪球基本面/**雪球讨论帖**/**知乎**/评论/股吧/淘股吧 |
+| **浏览器抓取** | 通过 Playwright 驱动本地浏览器抓取雪球/知乎等需登录或有反爬限制的数据源 |
+| **增量更新** | 记录上次采集位置，下次仅获取新数据，合并已有数据，无需从头重新抓取 |
+| **自定义保存路径** | 支持自定义数据保存目录，灵活管理存储位置 |
 | **情绪帖过滤** | 自动识别并过滤喊单帖、情绪化帖子，保留含实质内容的高价值帖子 |
 | **D1-D8 八维评分** | 规则引擎评分 + LLM 深度分析，生成完整 Word 报告 |
 | **技术指标** | 14 种技术指标 (MACD/KDJ/RSI/BOLL/CCI/WR/ATR 等) + 50+ K线形态识别 + D9 技术信号评分 |
@@ -41,7 +44,7 @@
 │                    分析流水线                         │
 ├──────────┬──────────┬──────────┬──────────┬─────────┤
 │ 数据采集  │ 价格分段  │ D1-D8评分 │ LLM增强  │ 报告生成 │
-│ (13平台) │ (摆荡腿)  │ (规则引擎)│ (多AI)   │ (docx)  │
+│ (15平台) │ (摆荡腿)  │ (规则引擎)│ (多AI)   │ (docx)  │
 └──────────┴──────────┴──────────┴──────────┴─────────┘
 ```
 
@@ -199,12 +202,12 @@ python app.py
 | `/` | GET | Web 界面 |
 | `/api/hot` | GET | 实时热门股票与行业 |
 | `/api/resolve/<code>` | GET | 股票代码解析 |
-| `/api/platforms` | GET | 数据源平台列表 |
+| `/api/platforms` | GET | 数据源平台列表 (15 个，含雪球讨论帖/知乎) |
 | `/api/ai/providers` | GET | AI 提供商列表 |
 | `/api/ai/config` | GET/POST | 获取/设置 AI 配置 |
 | `/api/ai/test` | POST | 测试 AI 连通性 |
 | `/api/ai/models/<provider>` | GET | 自动检测本地 AI 已加载模型 (Ollama/LM Studio) |
-| `/api/run` | POST | 启动分析任务 |
+| `/api/run` | POST | 启动分析任务 (支持 use_browser/incremental/data_outdir 参数) |
 | `/api/status/<run_id>` | GET | 查询任务进度 |
 | `/api/stop/<run_id>` | POST | 停止任务 |
 | `/api/stocks` | GET | 已有报告列表 |
@@ -214,13 +217,18 @@ python app.py
 | `/api/export/excel/<code>` | GET | 生成并下载 Excel 报告 |
 | `/api/industry/chart` | POST | 行业多股走势叠加图 |
 | `/api/industry/preview` | GET | 行业对比预览数据 |
+| `/api/data/savepath` | GET/POST | 获取/设置数据保存路径 |
+| `/api/data/browser-test` | POST | 检测浏览器抓取 (Playwright) 是否可用 |
+| `/api/data/browser-fetch` | POST | 手动触发浏览器抓取 (雪球/知乎) |
+| `/api/data/incremental` | GET | 获取所有股票增量更新状态摘要 |
+| `/api/data/incremental/<code>` | GET/DELETE | 查看/清除指定股票增量更新记录 |
 | `/download/<filename>` | GET | 下载报告文件 |
 
 ## 项目结构
 
 ```
 stock-credibility-analysis/
-├── app.py                      # Flask Web 应用主入口 (v2.5)
+├── app.py                      # Flask Web 应用主入口 (v2.6)
 ├── ai_config.json              # AI 配置文件 (gitignore, 自动生成)
 ├── ai_config.example.json      # AI 配置示例 (提交到仓库)
 ├── requirements.txt            # Python 依赖
@@ -229,11 +237,13 @@ stock-credibility-analysis/
 ├── .gitignore
 ├── 启动分析系统.bat             # Windows 一键启动
 ├── templates/
-│   └── index.html              # Web 前端界面 (v2.5)
+│   └── index.html              # Web 前端界面 (v2.6)
 ├── core/                       # 核心分析模块
 │   ├── stock_resolver.py       # 股票代码自动解析
-│   ├── data_collector.py       # 13 平台数据采集器
+│   ├── data_collector.py       # 15 平台数据采集器 (含雪球讨论帖/知乎)
 │   ├── collectors.py           # 扩展平台采集器
+│   ├── browser_fetcher.py      # 浏览器抓取模块 (Playwright, 雪球/知乎)
+│   ├── incremental_manager.py  # 增量更新管理器
 │   ├── segment.py              # 摆荡腿价格分段算法
 │   ├── score_rules.py          # D1-D8 规则评分引擎
 │   ├── technical.py            # 14种技术指标 + K线形态识别
@@ -260,11 +270,30 @@ stock-credibility-analysis/
 
 ### 数据采集
 
+- **15 平台采集**: K线/新闻/研报/财务/公告/互动易/同花顺/资金流/龙虎榜/雪球基本面/雪球讨论帖/知乎/评论/股吧/淘股吧
 - **K线数据**: 新浪财经 `stock_zh_a_daily` 接口，全历史日线数据
 - **多 CDN 容错**: push2 API 支持 5 个 CDN 节点自动切换 (82/48/18/56/default)
 - **新浪备用**: 涨幅榜和行业排行使用新浪 API 作为 push2 限流时的备用源
 - **超时保护**: 热门数据接口使用线程 + 10 秒超时保护，防止 push2 API 卡死
 - **缓存机制**: 热门数据 2 分钟缓存，股票解析结果持久化缓存
+- **浏览器抓取**: 雪球讨论帖/知乎通过 Playwright 驱动本地浏览器抓取，应对反爬限制
+- **API 备用**: 浏览器抓取失败时自动回退到 API 方式，确保数据可用性
+
+### 浏览器抓取 (Playwright)
+
+- **雪球讨论帖**: `fetch_xueqiu_posts()` - 抓取雪球个股社区讨论帖
+- **知乎搜索**: `fetch_zhihu_search()` - 抓取知乎相关问答与文章
+- **东财股吧(浏览器)**: `fetch_guba_browser()` - 应对验证码场景
+- **通用抓取**: `fetch_page()` - 自定义 URL + CSS 选择器
+- **Cookie 缓存**: 首次访问后自动保存 Cookie，后续抓取复用登录态
+- **安装**: `pip install playwright && playwright install chromium`
+
+### 增量更新
+
+- **状态管理**: `incremental_manager.py` 记录每只股票每个平台的采集位置
+- **去重合并**: 新数据与旧数据按标题去重合并，避免重复
+- **恢复点**: 记录上次页码、帖子 ID、时间戳，从上次位置继续
+- **API 端点**: `/api/data/incremental` 查看状态，`/api/data/incremental/<code>` 查看/清除
 
 ### 价格分段算法
 

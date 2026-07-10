@@ -59,3 +59,10 @@ scripts/debug_*.py
 scripts/probe_*.py
 scripts/test_*.py
 scripts/warmup_llm.py
+run_test.py
+
+# Incremental state (runtime)
+data/incremental_state.json
+
+# Browser cookies (runtime)
+data/browser_cookies/

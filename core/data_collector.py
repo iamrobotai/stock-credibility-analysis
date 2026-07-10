@@ -25,21 +25,23 @@ HEADERS = {"User-Agent": UA, "Referer": "https://guba.eastmoney.com/"}
 # ── 平台注册表 ──
 PLATFORM_REGISTRY = {
     # 核心 (不可关闭)
-    "kline":      {"label": "K线(新浪)",       "category": "core",     "value": "high",   "desc": "前复权全历史日线，分段+曲线基础"},
-    "news":       {"label": "东财新闻",         "category": "core",     "value": "high",   "desc": "公司相关新闻，含来源和时间"},
-    "reports":    {"label": "东财研报",         "category": "core",     "value": "high",   "desc": "机构研报，含EPS/PE/评级预测"},
-    "financials": {"label": "东财财务摘要",     "category": "core",     "value": "high",   "desc": "财务基本面数据"},
+    "kline":         {"label": "K线(新浪)",       "category": "core",     "value": "high",   "desc": "前复权全历史日线，分段+曲线基础"},
+    "news":          {"label": "东财新闻",         "category": "core",     "value": "high",   "desc": "公司相关新闻，含来源和时间"},
+    "reports":       {"label": "东财研报",         "category": "core",     "value": "high",   "desc": "机构研报，含EPS/PE/评级预测"},
+    "financials":    {"label": "东财财务摘要",     "category": "core",     "value": "high",   "desc": "财务基本面数据"},
     # 高价值 (默认启用)
-    "cninfo":     {"label": "巨潮资讯(公告)",   "category": "high",     "value": "high",   "desc": "官方公告：年报/定增/回购/减持"},
-    "ir":         {"label": "互动易(问答)",     "category": "high",     "value": "high",   "desc": "投资者问答，公司官方回应"},
-    "ths":        {"label": "同花顺(千股千评)", "category": "high",     "value": "medium", "desc": "千股千评/财务指标/公司亮点"},
-    "sina_fund":  {"label": "新浪资金流向",     "category": "high",     "value": "medium", "desc": "主力净流入/大单/超大单"},
-    "lhb":        {"label": "东财龙虎榜",       "category": "high",     "value": "medium", "desc": "近3月龙虎榜明细"},
-    "xueqiu":     {"label": "雪球(基本面)",     "category": "high",     "value": "medium", "desc": "雪球个股基本面信息"},
-    "comment":    {"label": "东财评论",         "category": "high",     "value": "medium", "desc": "市场情绪指标/综合评价"},
+    "cninfo":        {"label": "巨潮资讯(公告)",   "category": "high",     "value": "high",   "desc": "官方公告：年报/定增/回购/减持"},
+    "ir":            {"label": "互动易(问答)",     "category": "high",     "value": "high",   "desc": "投资者问答，公司官方回应"},
+    "ths":           {"label": "同花顺(千股千评)", "category": "high",     "value": "medium", "desc": "千股千评/财务指标/公司亮点"},
+    "sina_fund":     {"label": "新浪资金流向",     "category": "high",     "value": "medium", "desc": "主力净流入/大单/超大单"},
+    "lhb":           {"label": "东财龙虎榜",       "category": "high",     "value": "medium", "desc": "近3月龙虎榜明细"},
+    "xueqiu":        {"label": "雪球(基本面)",     "category": "high",     "value": "medium", "desc": "雪球个股基本面信息"},
+    "xueqiu_posts":  {"label": "雪球(讨论帖)",     "category": "high",     "value": "medium", "desc": "雪球社区讨论帖，需浏览器抓取", "browser": True},
+    "zhihu":         {"label": "知乎(讨论)",       "category": "high",     "value": "medium", "desc": "知乎相关问答与文章，需浏览器抓取", "browser": True},
+    "comment":       {"label": "东财评论",         "category": "high",     "value": "medium", "desc": "市场情绪指标/综合评价"},
     # 情绪 (可选，默认启用但带过滤)
-    "guba":       {"label": "东财股吧",         "category": "emotional","value": "low",    "desc": "散户讨论帖，情绪化较多"},
-    "taoguba":    {"label": "淘股吧",           "category": "emotional","value": "low",    "desc": "短线情绪/技术分析帖"},
+    "guba":          {"label": "东财股吧",         "category": "emotional","value": "low",    "desc": "散户讨论帖，情绪化较多"},
+    "taoguba":       {"label": "淘股吧",           "category": "emotional","value": "low",    "desc": "短线情绪/技术分析帖"},
 }
 
 # 默认启用的平台 (核心+高价值+情绪)
@@ -321,6 +323,181 @@ def collect_xueqiu(code):
         return []
 
 
+def collect_xueqiu_posts(code, name="", use_browser=True, incremental=False):
+    """
+    雪球 — 社区讨论帖
+
+    Args:
+        code: 股票代码
+        name: 股票名称
+        use_browser: 是否使用浏览器抓取 (应对反爬)
+        incremental: 是否增量更新
+
+    Returns:
+        list[dict]: 帖子列表
+    """
+    posts = []
+
+    if use_browser:
+        try:
+            from browser_fetcher import fetch_xueqiu_posts, is_available
+            if is_available():
+                posts = fetch_xueqiu_posts(code, max_count=30, headless=True)
+            else:
+                print("  [xueqiu_posts] Playwright 未安装，尝试 API 抓取")
+        except ImportError:
+            pass
+
+    # API 备用方案 (雪球 API)
+    if not posts:
+        sym = f"SH{code}" if code.startswith("6") else f"SZ{code}"
+        xq_url = f"https://xueqiu.com/S/{sym}"
+        s = requests.Session()
+        s.headers.update({"User-Agent": UA, "Referer": "https://xueqiu.com/"})
+        try:
+            s.get("https://xueqiu.com/", timeout=10)  # 获取 cookie
+            # 雪球状态流 API
+            api_url = f"https://xueqiu.com/v4/statuses/symbol_timeline.json?symbol={sym}&count=30&source=user"
+            r = s.get(api_url, timeout=10)
+            data = r.json()
+            statuses = data.get("statuses", []) or data.get("list", []) or []
+            for i, st in enumerate(statuses[:30]):
+                title = st.get("title", "") or st.get("description", "")[:80]
+                if not title:
+                    title = st.get("text", "")[:80]
+                posts.append({
+                    "id": f"XQ-{i+1:02d}",
+                    "title": title[:100],
+                    "author": st.get("user", {}).get("screen_name", ""),
+                    "time": datetime.fromtimestamp(
+                        st.get("created_at", 0) / 1000
+                    ).strftime("%Y-%m-%d %H:%M") if st.get("created_at") else "",
+                    "url": f"https://xueqiu.com{st.get('target', '')}",
+                    "content": st.get("description", st.get("text", ""))[:500],
+                    "replies": str(st.get("reply_count", 0)),
+                    "source": "雪球",
+                })
+        except Exception as e:
+            print(f"  [xueqiu_posts] API 抓取失败: {e}")
+
+    # 增量更新：合并旧数据
+    if incremental:
+        try:
+            from incremental_manager import get_state, merge_data, update_state, get_resume_point
+            old_data = []
+            raw_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "data", f"{code}_raw.json"
+            )
+            if os.path.exists(raw_path):
+                with open(raw_path, encoding="utf-8") as f:
+                    old_raw = json.load(f)
+                old_data = old_raw.get("xueqiu_posts", [])
+
+            merged, new_count = merge_data(old_data, posts, key_field="title")
+            update_state(code, "xueqiu_posts",
+                         last_post_id=posts[0]["id"] if posts else "",
+                         total_fetched=len(merged))
+            print(f"  [xueqiu_posts] 增量: 新增 {new_count} 条 / 总计 {len(merged)} 条")
+            return merged
+        except Exception as e:
+            print(f"  [xueqiu_posts] 增量合并失败: {e}")
+
+    return posts
+
+
+def collect_zhihu(code, name="", use_browser=True, incremental=False):
+    """
+    知乎 — 股票相关问答与文章
+
+    Args:
+        code: 股票代码
+        name: 股票名称 (用于搜索)
+        use_browser: 是否使用浏览器抓取
+        incremental: 是否增量更新
+
+    Returns:
+        list[dict]: 知乎搜索结果列表
+    """
+    keyword = name if name else code
+    results = []
+
+    if use_browser:
+        try:
+            from browser_fetcher import fetch_zhihu_search, is_available
+            if is_available():
+                results = fetch_zhihu_search(keyword, max_count=20, headless=True)
+            else:
+                print("  [zhihu] Playwright 未安装，尝试 API 抓取")
+        except ImportError:
+            pass
+
+    # API 备用方案
+    if not results:
+        try:
+            import urllib.parse
+            encoded = urllib.parse.quote(keyword)
+            url = f"https://www.zhihu.com/api/v4/search_v3?t=general&q={encoded}&correction=1&offset=0&limit=20"
+            s = requests.Session()
+            s.headers.update({
+                "User-Agent": UA,
+                "Referer": f"https://www.zhihu.com/search?type=content&q={encoded}",
+            })
+            # 先访问主页获取 cookie
+            try:
+                s.get("https://www.zhihu.com/", timeout=10)
+            except Exception:
+                pass
+            r = s.get(url, timeout=10)
+            data = r.json()
+            items = data.get("data", []) or []
+            for i, item in enumerate(items[:20]):
+                obj = item.get("object", {})
+                title = obj.get("title", "") or obj.get("question", {}).get("name", "")
+                excerpt = obj.get("excerpt", "") or obj.get("content", "")[:400]
+                author = obj.get("author", {}).get("name", "")
+                zhihu_url = obj.get("url", "")
+                if zhihu_url and not zhihu_url.startswith("http"):
+                    zhihu_url = "https://www.zhihu.com" + zhihu_url
+                votes = str(obj.get("voteup_count", 0))
+                if title:
+                    results.append({
+                        "id": f"ZH-{i+1:02d}",
+                        "title": title[:120],
+                        "author": author,
+                        "url": zhihu_url,
+                        "excerpt": excerpt,
+                        "votes": votes,
+                        "source": "知乎",
+                    })
+        except Exception as e:
+            print(f"  [zhihu] API 抓取失败: {e}")
+
+    # 增量更新
+    if incremental:
+        try:
+            from incremental_manager import merge_data, update_state
+            old_data = []
+            raw_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "data", f"{code}_raw.json"
+            )
+            if os.path.exists(raw_path):
+                with open(raw_path, encoding="utf-8") as f:
+                    old_raw = json.load(f)
+                old_data = old_raw.get("zhihu", [])
+            merged, new_count = merge_data(old_data, results, key_field="title")
+            update_state(code, "zhihu",
+                         last_keyword=keyword,
+                         total_fetched=len(merged))
+            print(f"  [zhihu] 增量: 新增 {new_count} 条 / 总计 {len(merged)} 条")
+            return merged
+        except Exception as e:
+            print(f"  [zhihu] 增量合并失败: {e}")
+
+    return results
+
+
 def collect_comment(code):
     """东财 — 市场情绪/综合评价"""
     comment_url = f"https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={'SH' if code.startswith('6') else 'SZ'}{code}"
@@ -398,11 +575,14 @@ def get_platform_list():
     return [{"id": k, **v} for k, v in PLATFORM_REGISTRY.items()]
 
 
-def collect(code, name="", outdir="data", platforms=None, filter_emotion=True):
+def collect(code, name="", outdir="data", platforms=None, filter_emotion=True,
+            use_browser=True, incremental=False):
     """
     主采集函数
     platforms: 平台 id 列表, None=全部
     filter_emotion: 是否过滤情绪帖 (仅影响 guba/taoguba)
+    use_browser: 是否启用浏览器抓取 (用于雪球/知乎等需登录源)
+    incremental: 是否增量更新 (仅影响 xueqiu_posts/zhihu/guba)
     """
     if platforms is None:
         platforms = DEFAULT_PLATFORMS
@@ -410,53 +590,91 @@ def collect(code, name="", outdir="data", platforms=None, filter_emotion=True):
     os.makedirs(outdir, exist_ok=True)
     prefix = "SH" if code.startswith("6") else "SZ"
     stock_url = f"https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={prefix}{code}"
+
+    # 如果增量更新，尝试加载旧数据
+    existing_data = {}
+    if incremental:
+        old_path = os.path.join(outdir, f"{code}_raw.json")
+        if os.path.exists(old_path):
+            try:
+                with open(old_path, encoding="utf-8") as f:
+                    existing_data = json.load(f)
+                print(f"  [增量模式] 加载旧数据: {sum(len(v) for k,v in existing_data.items() if isinstance(v, list))} 条")
+            except Exception:
+                pass
+
     result = {
         "code": code, "name": name,
         "stock_url": stock_url,
         "guba_url": f"https://guba.eastmoney.com/list,{code}.html",
         "cninfo_url": f"http://www.cninfo.com.cn/new/disclosure/stock?stockCode={code}&orgId=",
         "fetch_time": datetime.now().isoformat(),
+        "incremental": incremental,
     }
-    print(f"\n>>> [{code}] {name} | 平台: {len(platforms)}个")
+    print(f"\n>>> [{code}] {name} | 平台: {len(platforms)}个 | 浏览器: {'是' if use_browser else '否'} | 增量: {'是' if incremental else '否'}")
 
     # 平台调度表
     all_sources = [
-        ("kline",      lambda: collect_kline(code)),
-        ("news",       lambda: collect_news(code)),
-        ("reports",    lambda: collect_reports(code)),
-        ("financials", lambda: collect_financials(code)),
-        ("cninfo",     lambda: collect_cninfo(code)),
-        ("ir",         lambda: collect_ir(code)),
-        ("ths",        lambda: collect_ths(code)),
-        ("sina_fund",  lambda: collect_sina_fund(code)),
-        ("lhb",        lambda: collect_lhb(code)),
-        ("xueqiu",     lambda: collect_xueqiu(code)),
-        ("comment",    lambda: collect_comment(code)),
-        ("guba",       lambda: collect_guba(code)),
-        ("taoguba",    lambda: collect_taoguba(code, name)),
+        ("kline",         lambda: collect_kline(code)),
+        ("news",          lambda: collect_news(code)),
+        ("reports",       lambda: collect_reports(code)),
+        ("financials",    lambda: collect_financials(code)),
+        ("cninfo",        lambda: collect_cninfo(code)),
+        ("ir",            lambda: collect_ir(code)),
+        ("ths",           lambda: collect_ths(code)),
+        ("sina_fund",     lambda: collect_sina_fund(code)),
+        ("lhb",           lambda: collect_lhb(code)),
+        ("xueqiu",        lambda: collect_xueqiu(code)),
+        ("xueqiu_posts",  lambda: collect_xueqiu_posts(code, name, use_browser=use_browser, incremental=incremental)),
+        ("zhihu",         lambda: collect_zhihu(code, name, use_browser=use_browser, incremental=incremental)),
+        ("comment",       lambda: collect_comment(code)),
+        ("guba",          lambda: collect_guba(code)),
+        ("taoguba",       lambda: collect_taoguba(code, name)),
     ]
 
     for key, fn in all_sources:
         if key not in platforms:
             continue
+
+        # 增量模式下，核心数据源仍然全量采集
+        is_core = PLATFORM_REGISTRY.get(key, {}).get("category") == "core"
+        is_browser_platform = PLATFORM_REGISTRY.get(key, {}).get("browser", False)
+
+        # 浏览器源在未启用浏览器时跳过
+        if is_browser_platform and not use_browser:
+            result[key] = []
+            print(f"  [{key:15s}] 跳过 (需浏览器抓取)")
+            continue
+
         try:
             data = fn()
+
+            # 增量合并 (非核心数据)
+            if incremental and not is_core and existing_data:
+                old_list = existing_data.get(key, [])
+                if isinstance(data, list) and isinstance(old_list, list) and old_list:
+                    from incremental_manager import merge_data
+                    data, new_count = merge_data(old_list, data, key_field="title")
+                    print(f"  [{key:15s}] {len(data)} (增量新增 {new_count})")
+                    result[key] = data
+                    continue
+
             # 情绪帖过滤
             if filter_emotion and key in ("guba", "taoguba") and isinstance(data, list):
                 original = len(data)
                 data = _filter_emotional_posts(data, keep_threshold=1)
                 filtered = original - len(data)
                 if filtered > 0:
-                    print(f"  [{key:11s}] {len(data)} (过滤{filtered}条情绪帖)")
+                    print(f"  [{key:15s}] {len(data)} (过滤{filtered}条情绪帖)")
                 else:
-                    print(f"  [{key:11s}] {len(data)}")
+                    print(f"  [{key:15s}] {len(data)}")
             else:
                 n = len(data) if isinstance(data, list) else 1
-                print(f"  [{key:11s}] {n}")
+                print(f"  [{key:15s}] {n}")
             result[key] = data
         except Exception as e:
             result[key] = []
-            print(f"  [{key:11s}] FAIL: {e}")
+            print(f"  [{key:15s}] FAIL: {e}")
 
     outf = os.path.join(outdir, f"{code}_raw.json")
     with open(outf, "w", encoding="utf-8") as f:
@@ -467,7 +685,7 @@ def collect(code, name="", outdir="data", platforms=None, filter_emotion=True):
     total = 0
     plats = set()
     for k, v in result.items():
-        if k in ("code", "name", "fetch_time"):
+        if k in ("code", "name", "fetch_time", "stock_url", "guba_url", "cninfo_url", "incremental"):
             continue
         if isinstance(v, list) and v:
             total += len(v)

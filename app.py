@@ -1,8 +1,9 @@
 """
-股票可信度分析系统 - Flask Web 应用 v2.5
+股票可信度分析系统 - Flask Web 应用 v2.6
 ===================================
 支持: 股票代码自动解析 / 多 AI 提供商 (含 LM Studio) / 数据源平台选择 / 情绪帖过滤
       14种技术指标 / 50+K线形态 / 在线预览 / Excel导出 / 行业叠加图
+      雪球讨论帖+知乎数据源 / 浏览器抓取 / 增量更新 / 自定义保存路径
 
 启动: python app.py
 访问: http://localhost:5000
@@ -65,7 +66,8 @@ class TaskState:
         }
 
 
-def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, platforms=None, filter_emotion=True):
+def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, platforms=None, filter_emotion=True,
+                use_browser=True, incremental=False, data_outdir=None):
     """单只股票全链路"""
     code = stock["code"]
     name = stock.get("name", "")
@@ -88,11 +90,13 @@ def run_single(stock, state, use_llm=True, ai_provider=None, ai_config=None, pla
 
     try:
         # Step 1: 数据采集
-        plat_count = len(platforms) if platforms else 13
-        state.log(f"[{name}] 采集数据 ({plat_count}平台)...", "info")
+        plat_count = len(platforms) if platforms else 15
+        state.log(f"[{name}] 采集数据 ({plat_count}平台 | 浏览器:{'是' if use_browser else '否'} | 增量:{'是' if incremental else '否'})...", "info")
         from data_collector import collect
-        collect(code, name, outdir=str(DATA_DIR),
-                platforms=platforms, filter_emotion=filter_emotion)
+        outdir = data_outdir or str(DATA_DIR)
+        collect(code, name, outdir=outdir,
+                platforms=platforms, filter_emotion=filter_emotion,
+                use_browser=use_browser, incremental=incremental)
 
         raw_path = DATA_DIR / f"{code}_raw.json"
         if raw_path.exists():
@@ -207,20 +211,26 @@ def run_batch_task(state):
         ai_config = state.payload.get("ai_config")
         platforms = state.payload.get("platforms")
         filter_emotion = state.payload.get("filter_emotion", True)
+        use_browser = state.payload.get("use_browser", True)
+        incremental = state.payload.get("incremental", False)
+        data_outdir = state.payload.get("data_outdir")  # 自定义数据保存路径
 
         if platforms is None:
             from data_collector import DEFAULT_PLATFORMS
             platforms = DEFAULT_PLATFORMS
 
         active_ai = ai_provider or "ollama"
-        state.log(f"配置: AI={active_ai} | 平台={len(platforms)}个 | 情绪过滤={'是' if filter_emotion else '否'}", "info")
+        state.log(f"配置: AI={active_ai} | 平台={len(platforms)}个 | 情绪过滤={'是' if filter_emotion else '否'} | 浏览器={'是' if use_browser else '否'} | 增量={'是' if incremental else '否'}", "info")
+        if data_outdir:
+            state.log(f"数据保存路径: {data_outdir}", "info")
 
         for i, stock in enumerate(stocks):
             if state.stop_flag:
                 state.log("用户停止", "warn")
                 break
             state.log(f"[{i+1}/{state.total}] {stock.get('name', stock['code'])} ({stock['code']})", "info")
-            run_single(stock, state, use_llm, ai_provider, ai_config, platforms, filter_emotion)
+            run_single(stock, state, use_llm, ai_provider, ai_config, platforms, filter_emotion,
+                       use_browser=use_browser, incremental=incremental, data_outdir=data_outdir)
 
         if state.success > 1:
             state.log("打包 ZIP...", "info")
@@ -663,14 +673,125 @@ def api_technical(code):
         return jsonify({"ok": False, "error": str(e)[:200]})
 
 
+# ============================================================
+# v2.6 数据管理 API
+# ============================================================
+
+@app.route("/api/data/savepath", methods=["GET", "POST"])
+def api_data_savepath():
+    """获取/设置数据保存路径"""
+    if request.method == "GET":
+        # 返回当前数据目录和输出目录
+        return jsonify({
+            "ok": True,
+            "data_dir": str(DATA_DIR),
+            "output_dir": str(OUTPUT_DIR),
+        })
+
+    data = request.json or {}
+    path = data.get("path", "").strip()
+    if not path:
+        return jsonify({"ok": False, "error": "路径不能为空"})
+
+    try:
+        p = Path(path)
+        p.mkdir(parents=True, exist_ok=True)
+        return jsonify({"ok": True, "path": str(p)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@app.route("/api/data/incremental")
+def api_incremental_summary():
+    """获取所有股票的增量更新状态摘要"""
+    try:
+        from incremental_manager import get_summary
+        summary = get_summary()
+        return jsonify({"ok": True, "summary": summary})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@app.route("/api/data/incremental/<code>")
+def api_incremental_detail(code):
+    """获取指定股票的增量更新详情"""
+    try:
+        from incremental_manager import get_state
+        state = get_state(code)
+        return jsonify({"ok": True, "code": code, "state": state})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@app.route("/api/data/incremental/<code>", methods=["DELETE"])
+def api_incremental_clear(code):
+    """清除指定股票的增量更新记录"""
+    try:
+        from incremental_manager import clear_state
+        clear_state(code)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
+@app.route("/api/data/browser-test", methods=["POST"])
+def api_browser_test():
+    """测试浏览器抓取功能是否可用"""
+    try:
+        from browser_fetcher import is_available
+        available = is_available()
+        return jsonify({
+            "ok": True,
+            "available": available,
+            "message": "Playwright 可用" if available else "Playwright 未安装，运行: pip install playwright && playwright install chromium",
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": True,
+            "available": False,
+            "message": f"检测失败: {str(e)[:100]}",
+        })
+
+
+@app.route("/api/data/browser-fetch", methods=["POST"])
+def api_browser_fetch():
+    """手动触发浏览器抓取 (雪球/知乎)"""
+    data = request.json or {}
+    source = data.get("source", "")
+    code = data.get("code", "")
+    name = data.get("name", "")
+
+    try:
+        if source == "xueqiu_posts":
+            from browser_fetcher import fetch_xueqiu_posts, is_available
+            if not is_available():
+                return jsonify({"ok": False, "error": "Playwright 未安装"})
+            posts = fetch_xueqiu_posts(code, max_count=30)
+            return jsonify({"ok": True, "data": posts, "count": len(posts)})
+        elif source == "zhihu":
+            from browser_fetcher import fetch_zhihu_search, is_available
+            if not is_available():
+                return jsonify({"ok": False, "error": "Playwright 未安装"})
+            keyword = name if name else code
+            results = fetch_zhihu_search(keyword, max_count=20)
+            return jsonify({"ok": True, "data": results, "count": len(results)})
+        else:
+            return jsonify({"ok": False, "error": f"不支持的源: {source}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:200]})
+
+
 if __name__ == "__main__":
     print("=" * 50)
-    print("股票可信度分析系统 v2.5 - 本地版")
+    print("股票可信度分析系统 v2.6 - 本地版")
     print("=" * 50)
     print(f"数据目录: {DATA_DIR}")
     print(f"输出目录: {OUTPUT_DIR}")
     print()
     print("新功能:")
+    print("  - 雪球讨论帖 + 知乎数据源 (浏览器抓取)")
+    print("  - 增量更新 (无需从头重新获取)")
+    print("  - 自定义数据保存路径")
     print("  - LM Studio 本地 AI 支持 (自动检测已加载模型)")
     print("  - 14种技术指标 + 50+K线形态识别")
     print("  - D9 技术信号评分")
