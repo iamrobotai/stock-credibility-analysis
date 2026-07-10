@@ -499,10 +499,14 @@ def collect_zhihu(code, name="", use_browser=True, incremental=False):
 
 
 def collect_comment(code):
-    """东财 — 市场情绪/综合评价"""
+    """东财 — 市场情绪/综合评价 (综合得分/机构参与度/主力成本/关注指数)"""
     comment_url = f"https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={'SH' if code.startswith('6') else 'SZ'}{code}"
     try:
-        df = ak.stock_comment_em(symbol=code)
+        # 新版 akshare: stock_comment_em() 无参，返回全市场，需按代码过滤
+        df = _retry(lambda: ak.stock_comment_em())
+        col = "代码" if "代码" in df.columns else ("股票代码" if "股票代码" in df.columns else None)
+        if col:
+            df = df[df[col].astype(str) == str(code)]
         records = df.to_dict("records")
         for r in records:
             r["url"] = comment_url
