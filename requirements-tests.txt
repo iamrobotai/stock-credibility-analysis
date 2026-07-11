@@ -1,0 +1,4 @@
+# 自动化测试依赖（与运行环境使用的 managed venv 一致）
+pytest>=7.4
+pytest-playwright>=0.4
+playwright>=1.40

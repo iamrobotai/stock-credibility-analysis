@@ -24,18 +24,18 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
-.header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+body { font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: var(--bg-1); color: var(--text); min-height: 100vh; }
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
 .header h1 { font-size: 20px; color: #58a6ff; }
 .header .badge { background: #238636; color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 12px; }
 .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
-.card h2 { font-size: 16px; color: #58a6ff; margin-bottom: 16px; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+.card h2 { font-size: 16px; color: #58a6ff; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 .form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+.form-group label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
 .form-group input, .form-group select, .form-group textarea {
-  width: 100%; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+  width: 100%; background: var(--bg-1); border: 1px solid var(--border); color: var(--text);
   padding: 10px 12px; border-radius: 6px; font-size: 14px;
 }
 .form-group input:focus, .form-group select:focus { outline: none; border-color: #58a6ff; }
@@ -44,27 +44,27 @@ body { font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: #0d11
   border-radius: 6px; font-size: 14px; cursor: pointer; transition: background 0.2s;
 }
 .btn:hover { background: #2ea043; }
-.btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
-.btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-.btn-secondary:hover { background: #30363d; }
+.btn:disabled { background: var(--surface-3); color: #484f58; cursor: not-allowed; }
+.btn-secondary { background: var(--surface-3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); }
 .btn-sm { padding: 6px 14px; font-size: 12px; }
-.progress { background: #21262d; border-radius: 6px; height: 8px; overflow: hidden; margin: 12px 0; }
+.progress { background: var(--surface-3); border-radius: 6px; height: 8px; overflow: hidden; margin: 12px 0; }
 .progress-bar { background: #238636; height: 100%; transition: width 0.3s; }
-.log { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px;
+.log { background: var(--bg-1); border: 1px solid var(--border); border-radius: 6px; padding: 12px;
   height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 12px; line-height: 1.6; }
 .log .ok { color: #3fb950; }
 .log .fail { color: #f85149; }
 .log .info { color: #58a6ff; }
 .log .warn { color: #d29922; }
 .stats { display: flex; gap: 16px; margin: 16px 0; }
-.stat { background: #21262d; border-radius: 6px; padding: 12px 16px; text-align: center; flex: 1; }
+.stat { background: var(--surface-3); border-radius: 6px; padding: 12px 16px; text-align: center; flex: 1; }
 .stat .num { font-size: 24px; font-weight: bold; color: #58a6ff; }
-.stat .label { font-size: 12px; color: #8b949e; }
+.stat .label { font-size: 12px; color: var(--text-dim); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-table th { text-align: left; padding: 8px; border-bottom: 1px solid #30363d; color: #8b949e; }
-table td { padding: 8px; border-bottom: 1px solid #21262d; }
-.result-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #21262d; }
-.result-item .name { color: #c9d1d9; }
+table th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--text-dim); }
+table td { padding: 8px; border-bottom: 1px solid var(--surface-3); }
+.result-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--surface-3); }
+.result-item .name { color: var(--text); }
 .result-item .status { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
 .result-item .status.ok { background: #23863620; color: #3fb950; }
 .result-item .status.fail { background: #f8514920; color: #f85149; }
@@ -77,7 +77,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 .platform-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .platform-item {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  background: #0d1117; border: 1px solid #30363d; border-radius: 6px; cursor: pointer;
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
   transition: border-color 0.2s;
 }
 .platform-item:hover { border-color: #58a6ff; }
@@ -89,8 +89,8 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 .cat-tag.core { background: #58a6ff20; color: #58a6ff; }
 .cat-tag.high { background: #23863620; color: #3fb950; }
 .cat-tag.emotional { background: #d2992220; color: #d29922; }
-.platform-item .plat-label { font-size: 13px; color: #c9d1d9; }
-.platform-item .plat-desc { font-size: 11px; color: #8b949e; }
+.platform-item .plat-label { font-size: 13px; color: var(--text); }
+.platform-item .plat-desc { font-size: 11px; color: var(--text-dim); }
 
 /* AI 提供商 */
 .ai-provider-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
@@ -98,34 +98,34 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 .ai-status.ok { background: #23863620; color: #3fb950; }
 .ai-status.fail { background: #f8514920; color: #f85149; }
 .ai-status.pending { background: #d2992220; color: #d29922; }
-.model-select-hint { font-size: 11px; color: #8b949e; margin-top: 4px; }
+.model-select-hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
 
 .resolve-result { font-size: 13px; color: #3fb950; margin-top: 4px; }
 .resolve-result.error { color: #f85149; }
 
 .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .toggle-row input[type="checkbox"] { width: 16px; height: 16px; }
-.toggle-row label { font-size: 13px; color: #c9d1d9; cursor: pointer; }
+.toggle-row label { font-size: 13px; color: var(--text); cursor: pointer; }
 
 /* 热门推荐 */
 .hot-section { margin-bottom: 16px; }
 .hot-tabs { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
 .hot-tab { padding: 6px 14px; font-size: 13px; border-radius: 6px; cursor: pointer;
-  background: #21262d; color: #8b949e; border: 1px solid #30363d; transition: all 0.2s; }
+  background: var(--surface-3); color: var(--text-dim); border: 1px solid var(--border); transition: all 0.2s; }
 .hot-tab.active { background: #238636; color: #fff; border-color: #238636; }
 .hot-tab:hover { border-color: #58a6ff; }
 .hot-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; max-height: 200px; overflow-y: auto; }
 .hot-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px;
-  background: #0d1117; border: 1px solid #30363d; border-radius: 6px; cursor: pointer;
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
   transition: all 0.15s; font-size: 12px; }
 .hot-item:hover { border-color: #58a6ff; background: #58a6ff10; }
-.hot-item .hot-code { color: #8b949e; font-size: 11px; }
-.hot-item .hot-name { color: #c9d1d9; font-weight: 500; }
+.hot-item .hot-code { color: var(--text-dim); font-size: 11px; }
+.hot-item .hot-name { color: var(--text); font-weight: 500; }
 .hot-item .hot-change { margin-left: auto; font-size: 11px; font-weight: bold; }
 .hot-change.up { color: #f85149; }
 .hot-change.down { color: #3fb950; }
-.hot-item .hot-tag { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #30363d; color: #8b949e; }
-.hot-update { font-size: 11px; color: #8b949e; margin-top: 6px; }
+.hot-item .hot-tag { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--border); color: var(--text-dim); }
+.hot-update { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
 .hot-refresh { font-size: 11px; color: #58a6ff; cursor: pointer; margin-left: 8px; }
 .hot-refresh:hover { text-decoration: underline; }
 
@@ -133,30 +133,30 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: flex-start; padding: 20px; overflow-y: auto; }
 .modal-overlay.show { display: flex; }
-.modal { background: #161b22; border: 1px solid #30363d; border-radius: 12px; max-width: 1000px; width: 100%; margin: 20px auto; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #30363d; position: sticky; top: 0; background: #161b22; border-radius: 12px 12px 0 0; z-index: 10; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: 1000px; width: 100%; margin: 20px auto; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); border-radius: 12px 12px 0 0; z-index: 10; }
 .modal-header h2 { font-size: 18px; color: #58a6ff; }
-.modal-close { font-size: 24px; color: #8b949e; cursor: pointer; background: none; border: none; }
+.modal-close { font-size: 24px; color: var(--text-dim); cursor: pointer; background: none; border: none; }
 .modal-close:hover { color: #f85149; }
 .modal-body { padding: 24px; }
 .preview-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
 .preview-tab { padding: 6px 14px; font-size: 13px; border-radius: 6px; cursor: pointer;
-  background: #21262d; color: #8b949e; border: 1px solid #30363d; transition: all 0.2s; }
+  background: var(--surface-3); color: var(--text-dim); border: 1px solid var(--border); transition: all 0.2s; }
 .preview-tab.active { background: #238636; color: #fff; border-color: #238636; }
 .preview-tab:hover { border-color: #58a6ff; }
 .preview-section { display: none; }
 .preview-section.active { display: block; }
-.preview-chart { width: 100%; border-radius: 8px; border: 1px solid #30363d; }
-.preview-stat { display: inline-block; background: #21262d; border-radius: 6px; padding: 8px 14px; margin: 4px; }
+.preview-chart { width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.preview-stat { display: inline-block; background: var(--surface-3); border-radius: 6px; padding: 8px 14px; margin: 4px; }
 .preview-stat .val { font-size: 18px; font-weight: bold; color: #58a6ff; }
-.preview-stat .lbl { font-size: 11px; color: #8b949e; }
+.preview-stat .lbl { font-size: 11px; color: var(--text-dim); }
 .d-score { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; margin: 2px; }
 .d-score.high { background: #23863620; color: #3fb950; }
 .d-score.mid { background: #d2992220; color: #d29922; }
 .d-score.low { background: #f8514920; color: #f85149; }
 .preview-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
-.preview-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #30363d; color: #8b949e; font-size: 11px; }
-.preview-table td { padding: 6px 8px; border-bottom: 1px solid #21262d; }
+.preview-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 11px; }
+.preview-table td { padding: 6px 8px; border-bottom: 1px solid var(--surface-3); }
 .ad-row { background: #f8514910; }
 .callout-box { padding: 12px 16px; border-radius: 8px; margin: 12px 0; }
 .callout-box.warn { background: #FFF2F0; border: 1px solid #C00000; color: #C00000; }
@@ -166,7 +166,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 .industry-section { margin-bottom: 16px; }
 .industry-stock-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; max-height: 150px; overflow-y: auto; }
 .industry-stock-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px;
-  background: #0d1117; border: 1px solid #30363d; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; cursor: pointer; }
 .industry-stock-item:hover { border-color: #58a6ff; }
 .industry-stock-item.selected { border-color: #238636; background: #23863610; }
 </style>
@@ -194,7 +194,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
           <div class="hot-refresh" onclick="loadHotData(true)">↻ 刷新</div>
         </div>
         <div class="hot-grid" id="hot-grid">
-          <div style="color:#8b949e;grid-column:span 3;text-align:center;padding:20px">加载中...</div>
+          <div style="color:var(--text-dim);grid-column:span 3;text-align:center;padding:20px">加载中...</div>
         </div>
         <div class="hot-update" id="hot-update">--</div>
       </div>
@@ -213,7 +213,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 
         <div id="single-mode">
           <div class="form-group">
-            <label>股票代码 <span style="color:#8b949e">(输入代码后点击解析)</span></label>
+            <label>股票代码 <span style="color:var(--text-dim)">(输入代码后点击解析)</span></label>
             <div style="display:flex; gap:8px">
               <input type="text" id="stock_code" placeholder="如 002371" value="002371" style="flex:1">
               <button class="btn btn-sm btn-secondary" onclick="resolveStock()">🔍 解析</button>
@@ -232,7 +232,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
 
         <div id="batch-mode" style="display:none">
           <div class="form-group">
-            <label>股票列表 JSON <span style="color:#8b949e">(仅需 code，name/industry 可留空自动解析)</span></label>
+            <label>股票列表 JSON <span style="color:var(--text-dim)">(仅需 code，name/industry 可留空自动解析)</span></label>
             <textarea id="batch_config" rows="4" placeholder='[{"code":"002371"},{"code":"300308"}]'></textarea>
           </div>
           <button class="btn btn-sm btn-secondary" onclick="resolveBatch()">🔍 批量解析名称/行业</button>
@@ -259,7 +259,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
           </select>
         </div>
         <div class="form-group">
-          <label>模型 <span id="model-hint" style="color:#8b949e;font-size:11px"></span></label>
+          <label>模型 <span id="model-hint" style="color:var(--text-dim);font-size:11px"></span></label>
           <div style="display:flex; gap:8px">
             <input type="text" id="ai_model" placeholder="模型名称" value="qwen3:4b" style="flex:1" onchange="document.getElementById('ai_model').dataset.userModified='1'">
             <button class="btn btn-sm btn-secondary" id="detect-models-btn" onclick="detectModels()" style="display:none">🔍 检测模型</button>
@@ -303,13 +303,13 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
           <button class="btn btn-sm btn-secondary" onclick="showIncrementalState()" style="margin-left:8px">📋 查看</button>
         </div>
         <div class="form-group" style="margin-top:10px">
-          <label>数据保存路径 <span style="color:#8b949e;font-size:11px">(默认: data/ 目录)</span></label>
+          <label>数据保存路径 <span style="color:var(--text-dim);font-size:11px">(默认: data/ 目录)</span></label>
           <div style="display:flex; gap:8px">
             <input type="text" id="data_savepath" placeholder="留空使用默认路径" value="" style="flex:1">
             <button class="btn btn-sm btn-secondary" onclick="loadSavePath()">📂 加载</button>
             <button class="btn btn-sm btn-secondary" onclick="setSavePath()">💾 设置</button>
           </div>
-          <div id="savepath-hint" style="font-size:11px;color:#8b949e;margin-top:4px">点击「加载」查看当前路径</div>
+          <div id="savepath-hint" style="font-size:11px;color:var(--text-dim);margin-top:4px">点击「加载」查看当前路径</div>
         </div>
         <div class="toggle-row" style="margin-top:10px">
           <button class="btn btn-sm btn-secondary" onclick="selectAllPlatforms(true)">全选</button>
@@ -346,7 +346,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
       <div class="card" style="margin-top:20px">
         <h2>📄 分析结果</h2>
         <div id="results-area">
-          <div style="color:#8b949e; text-align:center; padding:20px">暂无结果</div>
+          <div style="color:var(--text-dim); text-align:center; padding:20px">暂无结果</div>
         </div>
       </div>
 
@@ -359,10 +359,10 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
           <button class="btn btn-sm btn-secondary" onclick="generateIndustryChart()" style="margin-left:8px">📈 生成对比图</button>
         </div>
         <div class="industry-stock-grid" id="industry-stock-grid">
-          <div style="color:#8b949e;grid-column:span 3;text-align:center;padding:10px">点击「加载已分析股票」</div>
+          <div style="color:var(--text-dim);grid-column:span 3;text-align:center;padding:10px">点击「加载已分析股票」</div>
         </div>
         <div id="industry-chart-area" style="margin-top:12px;display:none">
-          <img id="industry-chart-img" style="width:100%;border-radius:8px;border:1px solid #30363d" />
+          <img id="industry-chart-img" style="width:100%;border-radius:8px;border:1px solid var(--border)" />
         </div>
       </div>
     </div>
@@ -381,7 +381,7 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
       </div>
     </div>
     <div class="modal-body" id="preview-body">
-      <div style="text-align:center;padding:40px;color:#8b949e">加载中...</div>
+      <div style="text-align:center;padding:40px;color:var(--text-dim)">加载中...</div>
     </div>
   </div>
 </div>
@@ -428,7 +428,7 @@ async function loadHotData(force) {
       }
       if (isEmpty) {
         if (!hotData.stale) updateEl.textContent = result.data.update_time || '暂无实时数据（非交易时段）';
-        grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:20px">' + (hotData.note || '暂无实时数据') + '<br><small>可手动输入代码分析</small></div>';
+        grid.innerHTML = '<div style="color:var(--text-dim);grid-column:span 3;text-align:center;padding:20px">' + (hotData.note || '暂无实时数据') + '<br><small>可手动输入代码分析</small></div>';
       } else {
         renderHot();
       }
@@ -469,7 +469,7 @@ function renderHot() {
   }
 
   if (items.length === 0) {
-    grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:20px">暂无数据（非交易时段或API限流）</div>';
+    grid.innerHTML = '<div style="color:var(--text-dim);grid-column:span 3;text-align:center;padding:20px">暂无数据（非交易时段或API限流）</div>';
     return;
   }
 
@@ -925,7 +925,7 @@ async function openPreview(code, name) {
   previewName = name || code;
   document.getElementById('preview-title').textContent = previewName + ' (' + code + ') 分析预览';
   document.getElementById('preview-modal').classList.add('show');
-  document.getElementById('preview-body').innerHTML = '<div style="text-align:center;padding:40px;color:#8b949e">加载中...</div>';
+  document.getElementById('preview-body').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim)">加载中...</div>';
   try {
     const resp = await fetch('/api/preview/' + code);
     const result = await resp.json();
@@ -1017,7 +1017,7 @@ function renderPreview(data) {
   // Chart (交互式 + 实时标注)
   html += '<div class="preview-section" id="tab-chart">';
   html += '  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">';
-  html += '    <span style="font-size:12px;color:#8b949e">标注:</span>';
+  html += '    <span style="font-size:12px;color:var(--text-dim)">标注:</span>';
   html += '    <button class="btn btn-sm btn-secondary" id="btn-anno-point" onclick="setAnnoMode(\'point\')">🖱 点标注(单击)</button>';
   html += '    <button class="btn btn-sm btn-secondary" id="btn-anno-range" onclick="setAnnoMode(\'range\')">⬌ 区间标注(拖拽)</button>';
   html += '    <span id="anno-hint" style="font-size:11px;color:#58a6ff"></span>';
@@ -1025,7 +1025,7 @@ function renderPreview(data) {
   html += '    <button class="btn btn-sm btn-secondary" onclick="loadAnnotations(previewCode)">🔄 刷新标注</button>';
   html += '    <a class="btn btn-sm btn-secondary" href="/api/chart/' + data.code + '?_t=' + Date.now() + '" target="_blank">🖼 静态图</a>';
   html += '  </div>';
-  html += '  <div id="chart-host" style="position:relative;width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;overflow:hidden">';
+  html += '  <div id="chart-host" style="position:relative;width:100%;background:var(--bg-1);border:1px solid var(--border);border-radius:8px;overflow:hidden">';
   html += '    <svg id="kline-svg" viewBox="0 0 920 340" preserveAspectRatio="none" style="width:100%;height:auto;display:block;cursor:crosshair"></svg>';
   html += '    <div id="chart-tip" class="chart-tip"></div>';
   html += '  </div>';
@@ -1048,13 +1048,13 @@ function renderPreview(data) {
     html += '<td>' + d8txt + '</td><td>' + (p.avg_d || 0).toFixed(2) + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + (p.title || '').substring(0, 40) + '</td></tr>';
   }
   html += '</tbody></table>';
-  html += '<div style="font-size:11px;color:#8b949e;margin-top:8px">显示前 ' + Math.min(50, data.posts_total) + ' 条 / 共 ' + data.posts_total + ' 条</div>';
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-top:8px">显示前 ' + Math.min(50, data.posts_total) + ' 条 / 共 ' + data.posts_total + ' 条</div>';
   html += '</div>';
 
   // Segments (保留分段讨论机制；新增关联实时标注入口)
   html += '<div class="preview-section" id="tab-segments">';
   html += '  <div id="seg-anno-box" style="margin-bottom:10px"></div>';
-  html += '  <div style="font-size:11px;color:#8b949e;margin-bottom:6px">点击「标注」可按波段关联查询该分段的实时标注（标注↔分段 双向关联）。</div>';
+  html += '  <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">点击「标注」可按波段关联查询该分段的实时标注（标注↔分段 双向关联）。</div>';
   html += '<table class="preview-table"><thead><tr><th>波段</th><th>方向</th><th>起始日</th><th>结束日</th><th>起始价</th><th>结束价</th><th>涨跌幅</th><th>交易日</th><th>关联</th></tr></thead><tbody>';
   for (let s of (data.segments || [])) {
     const color = s.direction === '涨' ? '#f85149' : '#3fb950';
@@ -1069,7 +1069,7 @@ function renderPreview(data) {
   if (data.llm) {
     const llm = data.llm;
     const stats = llm.stats || {};
-    html += '<div style="font-size:11px;color:#8b949e;margin-bottom:8px">模型: ' + (stats.model || '?') + ' | 耗时: ' + (stats.duration_s || 0).toFixed(1) + 's | 速度: ' + (stats.tps || 0).toFixed(0) + ' tok/s</div>';
+    html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">模型: ' + (stats.model || '?') + ' | 耗时: ' + (stats.duration_s || 0).toFixed(1) + 's | 速度: ' + (stats.tps || 0).toFixed(0) + ' tok/s</div>';
     if (llm.overall_assessment) html += '<p style="margin:8px 0">' + llm.overall_assessment + '</p>';
     if (llm.key_risks && llm.key_risks.length) {
       html += '<div style="color:#f85149;font-size:13px;margin:8px 0">⚠️ 关键风险：</div>';
@@ -1091,26 +1091,26 @@ function renderPreview(data) {
       html += '</tbody></table>';
     }
   } else {
-    html += '<div style="color:#8b949e;text-align:center;padding:20px">未启用 LLM 分析或分析未完成</div>';
+    html += '<div style="color:var(--text-dim);text-align:center;padding:20px">未启用 LLM 分析或分析未完成</div>';
   }
   html += '</div>';
 
   // Technical indicators tab
   html += '<div class="preview-section" id="tab-technical">';
-  html += '<div id="tech-loading" style="text-align:center;padding:20px;color:#8b949e">加载技术指标中...</div>';
+  html += '<div id="tech-loading" style="text-align:center;padding:20px;color:var(--text-dim)">加载技术指标中...</div>';
   html += '<div id="tech-content" style="display:none"></div>';
   html += '</div>';
 
   // 量化多周期 tab（M7：量化分析 × 可信度评估融合）
   html += '<div class="preview-section" id="tab-quant">';
-  html += '<div id="quant-loading" style="text-align:center;padding:20px;color:#8b949e">加载量化多周期分析中...</div>';
+  html += '<div id="quant-loading" style="text-align:center;padding:20px;color:var(--text-dim)">加载量化多周期分析中...</div>';
   html += '<div id="quant-content" style="display:none"></div>';
   html += '</div>';
 
   // News & Reports
   html += '<div class="preview-section" id="tab-news">';
   if ((data.reports || []).length) {
-    html += '<h3 style="font-size:13px;color:#58a6ff">研报 <span style="font-size:10px;color:#8b949e">(点击标题查看原始链接)</span></h3><table class="preview-table"><thead><tr><th>机构</th><th>评级</th><th>EPS26</th><th>PE26</th><th>标题</th></tr></thead><tbody>';
+    html += '<h3 style="font-size:13px;color:#58a6ff">研报 <span style="font-size:10px;color:var(--text-dim)">(点击标题查看原始链接)</span></h3><table class="preview-table"><thead><tr><th>机构</th><th>评级</th><th>EPS26</th><th>PE26</th><th>标题</th></tr></thead><tbody>';
     data.reports.forEach(function(r) {
       const rurl = r.url || '';
       const title = (r.title || '').substring(0, 50);
@@ -1120,14 +1120,14 @@ function renderPreview(data) {
     html += '</tbody></table>';
   }
   if ((data.news || []).length) {
-    html += '<h3 style="font-size:13px;color:#58a6ff;margin-top:12px">新闻 <span style="font-size:10px;color:#8b949e">(点击标题查看原始链接)</span></h3>';
+    html += '<h3 style="font-size:13px;color:#58a6ff;margin-top:12px">新闻 <span style="font-size:10px;color:var(--text-dim)">(点击标题查看原始链接)</span></h3>';
     data.news.forEach(function(n) {
       const nurl = n.url || '';
       const ntime = (n.time || '').substring(0, 10);
       const nsrc = (n.source || '').substring(0, 8);
       const ntitle = n.title || '';
       const titleHtml = nurl ? '<a href="' + nurl + '" target="_blank" style="color:#58a6ff;text-decoration:none" title="打开新闻来源">' + ntitle + '</a>' : ntitle;
-      html += '<div style="padding:4px 0;border-bottom:1px solid #21262d;font-size:12px"><span style="color:#8b949e">' + ntime + '</span> <span style="color:#58a6ff">[' + nsrc + ']</span> ' + titleHtml + '</div>';
+      html += '<div style="padding:4px 0;border-bottom:1px solid var(--surface-3);font-size:12px"><span style="color:var(--text-dim)">' + ntime + '</span> <span style="color:#58a6ff">[' + nsrc + ']</span> ' + titleHtml + '</div>';
     });
   }
   if (data.stock_url) {
@@ -1185,9 +1185,9 @@ async function loadTechnicalData() {
       if (d.d9_score) {
         const d9 = d.d9_score;
         const d9c = d9.score >= 0.7 ? '#3fb950' : (d9.score >= 0.4 ? '#d29922' : '#f85149');
-        html += '<div style="background:#21262d;border-radius:8px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:16px">';
+        html += '<div style="background:var(--surface-3);border-radius:8px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:16px">';
         html += '<div style="font-size:36px;font-weight:bold;color:' + d9c + '">' + (d9.score * 100).toFixed(0) + '</div>';
-        html += '<div><div style="font-size:14px;font-weight:bold;color:#58a6ff">D9 技术信号评分</div><div style="font-size:12px;color:#c9d1d9">' + d9.summary + '</div></div>';
+        html += '<div><div style="font-size:14px;font-weight:bold;color:#58a6ff">D9 技术信号评分</div><div style="font-size:12px;color:var(--text)">' + d9.summary + '</div></div>';
         html += '</div>';
 
         if (d9.details) {
@@ -1206,15 +1206,15 @@ async function loadTechnicalData() {
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
       for (let [name, ind] of Object.entries(inds)) {
         if (!ind) continue;
-        html += '<div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px">';
+        html += '<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:6px;padding:10px">';
         html += '<div style="font-size:13px;font-weight:bold;color:#58a6ff;margin-bottom:6px">' + name + '</div>';
         html += '<div style="font-size:11px;color:#3fb950">' + (ind.status || '') + '</div>';
         if (ind.latest && typeof ind.latest === 'object') {
           for (let [k, v] of Object.entries(ind.latest)) {
-            html += '<div style="font-size:11px;color:#8b949e">' + k + ': ' + (typeof v === 'number' ? v.toFixed(2) : v) + '</div>';
+            html += '<div style="font-size:11px;color:var(--text-dim)">' + k + ': ' + (typeof v === 'number' ? v.toFixed(2) : v) + '</div>';
           }
         } else if (ind.latest !== undefined && ind.latest !== null) {
-          html += '<div style="font-size:14px;font-weight:bold;color:#c9d1d9">' + (typeof ind.latest === 'number' ? ind.latest.toFixed(2) : ind.latest) + '</div>';
+          html += '<div style="font-size:14px;font-weight:bold;color:var(--text)">' + (typeof ind.latest === 'number' ? ind.latest.toFixed(2) : ind.latest) + '</div>';
         }
         html += '</div>';
       }
@@ -1223,13 +1223,13 @@ async function loadTechnicalData() {
       if ((d.recent_patterns || []).length) {
         html += '<h3 style="font-size:13px;color:#58a6ff;margin-top:16px">近20日K线形态信号</h3><div style="display:flex;flex-wrap:wrap;gap:6px">';
         d.recent_patterns.forEach(function(p) {
-          const c = p.signal === 1 ? '#3fb950' : (p.signal === -1 ? '#f85149' : '#8b949e');
-          html += '<span style="background:#21262d;border-radius:4px;padding:4px 10px;font-size:11px;color:' + c + '">' + p.name + '(' + p.date + ')</span>';
+          const c = p.signal === 1 ? '#3fb950' : (p.signal === -1 ? '#f85149' : 'var(--text-dim)');
+          html += '<span style="background:var(--surface-3);border-radius:4px;padding:4px 10px;font-size:11px;color:' + c + '">' + p.name + '(' + p.date + ')</span>';
         });
         html += '</div>';
       }
 
-      html += '<div style="margin-top:16px"><img src="/api/chart/' + previewCode + '?_v=25" style="width:100%;border-radius:8px;border:1px solid #30363d" onerror="this.style.display=\'none\'" /></div>';
+      html += '<div style="margin-top:16px"><img src="/api/chart/' + previewCode + '?_v=25" style="width:100%;border-radius:8px;border:1px solid var(--border)" onerror="this.style.display=\'none\'" /></div>';
 
       content.innerHTML = html;
       content.style.display = '';
@@ -1274,10 +1274,10 @@ function renderQuantCredibility(data) {
   let html = '';
 
   // 综合可信度（量化多周期 × 可信度评估融合）
-  html += '<div style="background:#21262d;border-radius:8px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
-  html += '<div style="font-size:40px;font-weight:bold;color:' + gc + '">' + (comp_score != null ? Math.round(comp_score) : '-') + '<span style="font-size:16px;color:#8b949e">/100</span></div>';
+  html += '<div style="background:var(--surface-3);border-radius:8px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
+  html += '<div style="font-size:40px;font-weight:bold;color:' + gc + '">' + (comp_score != null ? Math.round(comp_score) : '-') + '<span style="font-size:16px;color:var(--text-dim)">/100</span></div>';
   html += '<div style="flex:1;min-width:220px"><div style="font-size:14px;font-weight:bold;color:#58a6ff">综合可信度评分 · ' + (comp.grade || '') + '</div>';
-  html += '<div style="font-size:12px;color:#c9d1d9;margin-top:4px;line-height:1.6">' + (comp.explanation || '') + '</div></div>';
+  html += '<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.6">' + (comp.explanation || '') + '</div></div>';
   html += '</div>';
 
   // 三维权重条
@@ -1296,7 +1296,7 @@ function renderQuantCredibility(data) {
     if (!r) return;
     const sc = r.score >= 60 ? '#3fb950' : (r.score <= 40 ? '#f85149' : '#d29922');
     const sig = r.signal;
-    const sc2 = sig === '偏多' ? '#3fb950' : (sig === '偏空' ? '#f85149' : '#8b949e');
+    const sc2 = sig === '偏多' ? '#3fb950' : (sig === '偏空' ? '#f85149' : 'var(--text-dim)');
     const vol = (r.volatility && r.volatility.ann_pct != null) ? r.volatility.ann_pct + '%' : '-';
     const vr = (r.volume_change && r.volume_change.vol_ratio != null) ? r.volume_change.vol_ratio : '-';
     const vt = (r.volume_change && r.volume_change.vol_trend_pct != null) ? (r.volume_change.vol_trend_pct > 0 ? '+' : '') + r.volume_change.vol_trend_pct + '%' : '-';
@@ -1306,7 +1306,7 @@ function renderQuantCredibility(data) {
   html += '</tbody></table>';
 
   const qc = data.timeframe_analysis ? data.timeframe_analysis.composite_quant_score : null;
-  html += '<div style="margin-top:10px;font-size:12px;color:#8b949e">多周期量化综合评分（月0.5/周0.3/日0.2 加权）：<b style="color:#c9d1d9">' + (qc != null ? qc : '-') + '</b> ｜ 跨周期共振：<b style="color:' + (align.indexOf('多头')>=0?'#3fb950':(align.indexOf('空头')>=0?'#f85149':'#8b949e')) + '">' + align + '</b></div>';
+  html += '<div style="margin-top:10px;font-size:12px;color:var(--text-dim)">多周期量化综合评分（月0.5/周0.3/日0.2 加权）：<b style="color:var(--text)">' + (qc != null ? qc : '-') + '</b> ｜ 跨周期共振：<b style="color:' + (align.indexOf('多头')>=0?'#3fb950':(align.indexOf('空头')>=0?'#f85149':'var(--text-dim)')) + '">' + align + '</b></div>';
 
   document.getElementById('quant-content').innerHTML = html;
 }
@@ -1314,7 +1314,7 @@ function renderQuantCredibility(data) {
 function quantBar(label, val, color) {
   if (val == null) return '';
   const pct = Math.max(0, Math.min(100, val));
-  return '<div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px 10px;min-width:150px"><div style="font-size:11px;color:#8b949e">' + label + '</div><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div style="flex:1;height:6px;background:#0d1117;border-radius:3px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + color + '"></div></div><div style="font-size:12px;color:' + color + ';font-weight:bold">' + Math.round(val) + '</div></div></div>';
+  return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;min-width:150px"><div style="font-size:11px;color:var(--text-dim)">' + label + '</div><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div style="flex:1;height:6px;background:var(--bg-1);border-radius:3px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + color + '"></div></div><div style="font-size:12px;color:' + color + ';font-weight:bold">' + Math.round(val) + '</div></div></div>';
 }
 
 async function loadIndustryStocks() {
@@ -1332,7 +1332,7 @@ async function loadIndustryStocks() {
 function renderIndustryStocks() {
   const grid = document.getElementById('industry-stock-grid');
   if (industryStocks.length === 0) {
-    grid.innerHTML = '<div style="color:#8b949e;grid-column:span 3;text-align:center;padding:10px">无已分析股票</div>';
+    grid.innerHTML = '<div style="color:var(--text-dim);grid-column:span 3;text-align:center;padding:10px">无已分析股票</div>';
     return;
   }
   grid.innerHTML = industryStocks.map(function(s) {
@@ -1508,12 +1508,12 @@ async function initInteractiveChart(code) {
     const resp = await fetch('/api/kline/' + code + '?_t=' + Date.now());
     const data = await resp.json();
     if (!data.ok) {
-      svg.innerHTML = '<text x="20" y="30" fill="#8b949e" font-size="13">无 K 线数据，请先运行分析</text>';
+      svg.innerHTML = '<text x="20" y="30" fill="var(--text-dim)" font-size="13">无 K 线数据，请先运行分析</text>';
       return;
     }
     const k = data.kline || [];
     if (!k.length) {
-      svg.innerHTML = '<text x="20" y="30" fill="#8b949e" font-size="13">K 线为空</text>';
+      svg.innerHTML = '<text x="20" y="30" fill="var(--text-dim)" font-size="13">K 线为空</text>';
       return;
     }
     const closes = k.map(b => b.close);
@@ -1742,24 +1742,24 @@ function renderAnnotations(list) {
   const panel = document.getElementById('anno-panel');
   if (!panel) return;
   if (!list.length) {
-    panel.innerHTML = '<div style="font-size:11px;color:#8b949e">暂无标注。点击「点标注/区间标注」后在曲线上操作即可添加。</div>';
+    panel.innerHTML = '<div style="font-size:11px;color:var(--text-dim)">暂无标注。点击「点标注/区间标注」后在曲线上操作即可添加。</div>';
     return;
   }
-  let h = '<div style="font-size:12px;color:#c9d1d9;margin-bottom:6px">📍 实时标注（' + list.length + '）— 点标注 ● / 区间标注 ▭</div>';
+  let h = '<div style="font-size:12px;color:var(--text);margin-bottom:6px">📍 实时标注（' + list.length + '）— 点标注 ● / 区间标注 ▭</div>';
   list.forEach(a => {
     const isPt = a.type === 'point';
     const when = isPt ? a.date : (a.start_date + ' ~ ' + a.end_date);
-    h += '<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:8px;margin-bottom:6px">';
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px">';
     h += '  <div style="display:flex;justify-content:space-between;gap:8px">';
     h += '    <span><span style="color:#f0b429">' + (isPt ? '●' : '▭') + '</span> <b>' + esc(a.label || '(无标题)') + '</b></span>';
-    h += '    <button class="anno-del" data-del="' + a.id + '" style="background:none;border:1px solid #30363d;color:#8b949e;border-radius:4px;cursor:pointer;font-size:11px">✕</button>';
+    h += '    <button class="anno-del" data-del="' + a.id + '" style="background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:4px;cursor:pointer;font-size:11px">✕</button>';
     h += '  </div>';
-    h += '  <div style="font-size:11px;color:#8b949e;margin-top:2px">' + when + (a.price != null ? (' · ' + a.price) : '') + '</div>';
+    h += '  <div style="font-size:11px;color:var(--text-dim);margin-top:2px">' + when + (a.price != null ? (' · ' + a.price) : '') + '</div>';
     if (a.note) h += '<div style="font-size:11px;margin-top:2px">' + esc(a.note) + '</div>';
     h += '  <div style="margin-top:4px">';
     h += a.segment_id
       ? ('<span class="anno-seg" data-seg="' + a.segment_id + '" style="display:inline-block;font-size:11px;color:#58a6ff;cursor:pointer">↪ 关联 ' + a.segment_id + '</span>')
-      : '<span style="color:#8b949e">未关联分段</span>';
+      : '<span style="color:var(--text-dim)">未关联分段</span>';
     h += '  </div>';
     h += '</div>';
   });
@@ -1776,26 +1776,26 @@ async function showSegmentAnnotations(segId, dir, pct) {
   goTab('segments');
   const box = document.getElementById('seg-anno-box');
   if (!box) return;
-  box.innerHTML = '<div style="font-size:12px;color:#8b949e">查询分段 ' + segId + ' 的关联标注中...</div>';
+  box.innerHTML = '<div style="font-size:12px;color:var(--text-dim)">查询分段 ' + segId + ' 的关联标注中...</div>';
   try {
     const resp = await fetch('/api/annotations/' + previewCode + '/segment/' + segId + '?_t=' + Date.now());
     const d = await resp.json();
     const list = d.annotations || [];
     let h = '<div class="callout-box info" style="margin-bottom:8px">📊 分段 <b>' + segId + ' ' + (dir || '') + (pct || '') + '</b> 关联实时标注：共 ' + list.length + ' 条'
       + ' <button class="btn btn-sm btn-secondary" onclick="document.getElementById(\'seg-anno-box\').innerHTML=\'\'">收起</button></div>';
-    if (!list.length) h += '<div style="font-size:11px;color:#8b949e">该分段暂无标注。</div>';
+    if (!list.length) h += '<div style="font-size:11px;color:var(--text-dim)">该分段暂无标注。</div>';
     list.forEach(a => {
       const isPt = a.type === 'point';
       const when = isPt ? a.date : (a.start_date + ' ~ ' + a.end_date);
-      h += '<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:8px;margin-bottom:6px">';
+      h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px">';
       h += '<div><span style="color:#f0b429">' + (isPt ? '●' : '▭') + '</span> <b>' + esc(a.label || '(无标题)') + '</b></div>';
-      h += '<div style="font-size:11px;color:#8b949e;margin-top:2px">' + when + (a.note ? (' · ' + esc(a.note)) : '') + '</div>';
+      h += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">' + when + (a.note ? (' · ' + esc(a.note)) : '') + '</div>';
       h += '</div>';
     });
     box.innerHTML = h;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
-    box.innerHTML = '<div style="color:#8b949e">查询失败</div>';
+    box.innerHTML = '<div style="color:var(--text-dim)">查询失败</div>';
   }
 }
 

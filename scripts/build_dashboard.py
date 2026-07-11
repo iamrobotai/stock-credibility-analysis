@@ -3,8 +3,8 @@
 """
 合并 index.html (可信度分析) 与 quant.html (量化分析) 为单一网页 dashboard.html。
 - 以 index.html 为基底（head/style/header/控制面板/预览模态）
-- 在 header 下注入顶层标签页 [可信度分析] [量化分析]
-- 可信度内容包进 #panel-cred，quant.html 结果区+控件注入 #panel-quant（默认隐藏）
+- 可信度内容包进 #panel-cred，quant.html 结果区+控件注入 #panel-quant
+- 两分析「合并为统一综合分析视图」同屏展示（无 Tab 切换，见 merge-note）
 - JS：index 脚本全留；quant 脚本做冲突改名后追加
 冲突处理：
   * toggleTheme/applyThemeLabel：两文件同逻辑，保留 index 版，删 quant 重复副本
@@ -19,6 +19,17 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IDX = os.path.join(BASE, "templates", "index.html")
 QNT = os.path.join(BASE, "templates", "quant.html")
 OUT = os.path.join(BASE, "templates", "dashboard.html")
+
+# 安全护栏：dashboard.html 现在由人工直接维护（合并视图 / 浅色模式 /
+# 在线预览 等改动均在 dashboard.html 上完成）。本脚本仅作为「从 index+quant
+# 重新生成」的参考手段——默认拒绝覆盖已有文件，避免误执行导致手工改动丢失。
+if os.path.exists(OUT) and "--force" not in sys.argv:
+    sys.stderr.write(
+        "⚠️  已存在 hand-maintained 的 dashboard.html，默认不覆盖。\n"
+        "    若确需从 index.html + quant.html 重新生成，请显式加 --force：\n"
+        "    python scripts/build_dashboard.py --force\n"
+    )
+    sys.exit(0)
 
 def must(s, marker):
     if marker not in s:
@@ -75,52 +86,33 @@ q_script_inner = q_script_inner.replace(
     "const code=($('#stock').value||'').trim()||($('#stock_code').value||'').trim();if(!code)return;"
 )
 
-# ---------- 4) 顶层标签页 + CSS ----------
-top_tabs = (
-    '<div class="top-tabs">\n'
-    '  <button class="top-tab active" id="tab-cred" onclick="showPanel(\'cred\')">📊 可信度分析</button>\n'
-    '  <button class="top-tab" id="tab-quant" onclick="showPanel(\'quant\')">📈 量化分析（回测 · 资金 · 融合）</button>\n'
-    '</div>\n'
-)
-top_tab_css = (
-    "\n.top-tabs{display:flex;gap:8px;padding:12px 24px;background:var(--bg-card,#161b22);"
-    "border-bottom:1px solid var(--border,#30363d);flex-wrap:wrap;}\n"
-    ".top-tab{padding:8px 18px;font-size:14px;border-radius:8px;cursor:pointer;"
-    "border:1px solid var(--border,#30363d);background:var(--bg,#0d1117);color:var(--text,#c9d1d9);"
-    "transition:var(--t,.22s);}\n"
-    ".top-tab:hover{border-color:var(--accent,#58a6ff);}\n"
-    ".top-tab.active{background:linear-gradient(135deg,#238636,#2ea043);border-color:#238636;color:#fff;"
-    "box-shadow:0 4px 14px rgba(35,134,54,.35);}\n"
+# ---------- 4) 统一合并视图引导（替代原 Tab 切换） ----------
+# 可信度分析(D1–D9) 与量化分析(回测·资金·多周期融合) 同屏展示
+merge_note = (
+    '<div class="merge-note">🧭 已合并为「统一综合分析视图」：可信度分析（D1–D9）与量化分析'
+    '（回测 · 资金 · 多周期融合）同屏展示，向下滚动查看全部维度。</div>\n'
 )
 assert "</style>" in head_and_style
-head_and_style = head_and_style.replace("</style>", top_tab_css + "</style>", 1)
 # 更新标题与版本标识
 head_and_style = head_and_style.replace(
     "股票可信度分析系统 v2.6", "股票可信度分析系统 · 合并版 v3.4"
 )
 
-# ---------- 5) 统一引导 + showPanel ----------
+# ---------- 5) 统一引导（已取消 Tab 切换，仅保留量化初始化） ----------
 bootstrap = (
-    "\nfunction showPanel(n){\n"
-    "  var pc=document.getElementById('panel-cred'),pq=document.getElementById('panel-quant');\n"
-    "  var tc=document.getElementById('tab-cred'),tq=document.getElementById('tab-quant');\n"
-    "  if(pc)pc.style.display=(n==='cred')?'block':'none';\n"
-    "  if(pq)pq.style.display=(n==='quant')?'block':'none';\n"
-    "  if(tc)tc.classList.toggle('active',n==='cred');\n"
-    "  if(tq)tq.classList.toggle('active',n==='quant');\n"
-    "}\n"
-    "initQuant();\n"
+    "\ninitQuant();\n"
 )
 
 # ---------- 6) 组装 ----------
 out = []
 out.append(head_and_style)          # </head>
 out.append(idx_header)               # <body> + header(含主题切换)
-out.append(top_tabs)
+# 统一合并视图引导：可信度分析 + 量化分析同屏展示（无 Tab 切换）
+out.append(merge_note)
 out.append('<div id="panel-cred">\n')
 out.append(idx_rest)
 out.append('</div>\n')
-out.append('<div id="panel-quant" style="display:none">\n')
+out.append('<div id="panel-quant">\n')
 out.append(q_body)
 out.append('</div>\n')
 out.append('<script>\n')
@@ -137,4 +129,4 @@ print("   init() 调用:", idx_script_inner.count("init();") and "保留(index)"
 print("   initQuant() 定义:", "async function initQuant(){" in q_script_inner)
 print("   qlog() 定义:", "function qlog(" in q_script_inner)
 print("   toggleTheme 仅一份:", idx_script_inner.count("function toggleTheme()") == 1)
-print("   showPanel 已注入:", "function showPanel(" in "".join(bootstrap))
+print("   统一合并视图(无 Tab):", "merge-note" in "".join(out))

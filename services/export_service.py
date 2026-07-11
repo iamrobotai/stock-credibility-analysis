@@ -40,7 +40,7 @@ def export_quant_word(code: str, with_llm: bool = True,
 
 
 def export_quant_industry(codes: list, title: str | None = None,
-                          with_llm: bool = False) -> dict:
+                         with_llm: bool = False) -> dict:
     """M6：行业整合三维 Word 报告，返回 {ok, path|error}。"""
     try:
         from quant_to_word import generate_industry as gen_ind
@@ -52,4 +52,73 @@ def export_quant_industry(codes: list, title: str | None = None,
         return {"ok": False, "error": str(e)[:300]}
 
 
-__all__ = ["export_excel", "export_quant_word", "export_quant_industry"]
+def docx_to_html(filename: str) -> dict:
+    """将 OUTPUT_DIR 下的 .docx 转换为内联预览 HTML（免下载）。
+
+    使用 python-docx 遍历段落（含标题/加粗/斜体）/ 表格，
+    对文本做 HTML 转义以防 XSS，不引入文档内任何原始标签。
+    返回 {ok, html, name | error}。
+    """
+    try:
+        from docx import Document
+        from html import escape
+        raw = str(filename)
+        # 防目录穿越：仅允许 OUTPUT_DIR 下的纯文件名
+        if ("/" in raw) or ("\\" in raw) or (".." in raw) \
+           or not raw.lower().endswith(".docx"):
+            return {"ok": False, "error": "非法文件名"}
+        safe = os.path.basename(raw)
+        path = OUTPUT_DIR / safe
+        if not path.exists():
+            return {"ok": False, "error": f"文件不存在: {safe}"}
+
+        doc = Document(str(path))
+
+        def _tag(p) -> str:
+            st = (p.style.name if p.style else "") or ""
+            if st == "Title" or st.startswith("Heading 1"):
+                return "h1"
+            if st.startswith("Heading 2"):
+                return "h2"
+            if st.startswith("Heading 3"):
+                return "h3"
+            return "p"
+
+        def _runs(p) -> str:
+            s = ""
+            for r in p.runs:
+                t = escape(r.text)
+                if not t:
+                    continue
+                if r.bold and r.italic:
+                    t = f"<strong><em>{t}</em></strong>"
+                elif r.bold:
+                    t = f"<strong>{t}</strong>"
+                elif r.italic:
+                    t = f"<em>{t}</em>"
+                s += t
+            return s or "&nbsp;"
+
+        out = ['<div class="docx-body">']
+        for p in doc.paragraphs:
+            txt = _runs(p).strip()
+            if not txt or txt == "&nbsp;":
+                continue
+            out.append(f"<{_tag(p)}>{txt}</{_tag(p)}>")
+        for tb in doc.tables:
+            out.append('<table class="docx-table">')
+            for row in tb.rows:
+                out.append("<tr>")
+                for cell in row.cells:
+                    ct = escape(cell.text).replace("\n", "<br>")
+                    out.append(f"<td>{ct}</td>")
+                out.append("</tr>")
+            out.append("</table>")
+        out.append("</div>")
+        return {"ok": True, "html": "".join(out), "name": safe}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:300]}
+
+
+__all__ = ["export_excel", "export_quant_word", "export_quant_industry",
+            "docx_to_html"]

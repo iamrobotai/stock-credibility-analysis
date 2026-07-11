@@ -14,9 +14,11 @@ import os
 import sys
 import json
 import time
+import gzip
 import glob
 import threading
 import traceback
+from collections import OrderedDict
 from pathlib import Path
 from datetime import datetime
 
@@ -57,6 +59,56 @@ app = Flask(__name__, template_folder=str(BASE_DIR / "templates"))
 
 tasks = {}
 quant_runs = {}
+
+# ---------------------------------------------------------------------------
+# 性能 / 安全增强（after_request 统一处理，对所有响应生效）
+#  - 文本类响应 Gzip 压缩（text/*、application/json、js、svg）
+#  - 静态资源长效缓存（/static/* 1 天）
+#  - 安全响应头（nosniff / 防点击劫持）
+# 浏览器会自动按 Accept-Encoding 解压，前端 fetch().json() 不受影响。
+# ---------------------------------------------------------------------------
+_COMPRESS_TYPES = (
+    "text/", "application/json", "application/javascript",
+    "application/x-javascript", "image/svg",
+)
+_DOCX_CACHE_MAX = 64
+_docx_cache = OrderedDict()  # (filename, mtime) -> html
+
+
+@app.after_request
+def _optimize_response(resp):
+    # 1) 安全头
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+
+    path = ""
+    try:
+        path = request.path
+    except Exception:
+        pass
+
+    # 2) 缓存策略：静态资源长缓存；其余动态接口禁止缓存
+    if path.startswith("/static/"):
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+    elif "Cache-Control" not in resp.headers:
+        resp.headers["Cache-Control"] = "no-store"
+
+    # 3) Gzip 压缩（流式直传 / 无 body 跳过）
+    if getattr(resp, "direct_passthrough", False) or not resp.data:
+        return resp
+    ctype = resp.headers.get("Content-Type", "")
+    if not any(t in ctype for t in _COMPRESS_TYPES):
+        return resp
+    if "gzip" not in request.headers.get("Accept-Encoding", "").lower():
+        return resp
+    if len(resp.data) < 512:
+        return resp
+    gz = gzip.compress(resp.data, 6)
+    resp.data = gz
+    resp.headers["Content-Encoding"] = "gzip"
+    resp.headers["Content-Length"] = str(len(gz))
+    resp.headers["Vary"] = "Accept-Encoding"
+    return resp
 
 
 class TaskState:
@@ -435,6 +487,28 @@ def api_export_quant_industry():
                         download_name=os.path.basename(res["path"]))
     return jsonify({"ok": False, "error": res.get("error", "行业 Word 生成失败")}), 500
 
+@app.route("/api/docx-html/<path:filename>")
+def api_docx_html(filename):
+    """M8：将 OUTPUT_DIR 下的 .docx 转为内联 HTML，支持浏览器免下载预览。"""
+    # 文件未变则复用内存缓存，避免重复解析大文档（按 文件名+修改时间 命中）
+    full = OUTPUT_DIR / filename
+    cache_key = None
+    if full.exists():
+        cache_key = (filename, os.path.getmtime(full))
+        cached = _docx_cache.get(cache_key)
+        if cached is not None:
+            # 命中：移动到队首（LRU）
+            _docx_cache.move_to_end(cache_key)
+            return jsonify({"ok": True, "html": cached, "name": filename, "cached": True})
+    res = export_service.docx_to_html(filename)
+    if res.get("ok"):
+        html = res["html"]
+        if cache_key is not None:
+            _docx_cache[cache_key] = html
+            while len(_docx_cache) > _DOCX_CACHE_MAX:
+                _docx_cache.popitem(last=False)
+        return jsonify({"ok": True, "html": html, "name": res.get("name")})
+    return jsonify({"ok": False, "error": res.get("error", "Word 转换失败")}), 404
 
 # ============================================================
 # 图表实时标注 API (services.annotation_service)
@@ -569,7 +643,8 @@ def api_stocks():
         xlsx_name = name.replace("_完整分析.docx", "_分析.xlsx")
         has_xlsx = (OUTPUT_DIR / xlsx_name).exists()
         files.append({"name": name, "size": os.path.getsize(f) // 1024,
-                      "code": code, "xlsx": xlsx_name if has_xlsx else None})
+                      "code": code, "docx": name,
+                      "xlsx": xlsx_name if has_xlsx else None})
     return jsonify({"total": len(files), "files": files})
 
 
