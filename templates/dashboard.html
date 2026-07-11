@@ -1450,9 +1450,10 @@ function renderStockInfo(q){
 }
 
 function autoSaveModel(provider, model){
+  var _p = {active_provider: provider, providers: {}};
+  _p.providers[provider] = {model: model};
   try{
-    fetch('/api/ai/config',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({active_provider:provider,providers:{[provider]:{model:model}})});
+    fetch('/api/ai/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_p)});
   }catch(e){}
 }
 
