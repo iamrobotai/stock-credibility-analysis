@@ -19,7 +19,14 @@ def run_quant(code: str) -> dict:
         res = QE.run_stock(code, peer_avg=pa)
         if res.get("error"):
             return {"ok": False, "error": res["error"]}
-        return {"ok": True, "data": res}
+        # 附实时行情（graceful，失败不影响量化主流程）
+        try:
+            from core.data_collector import collect_quote
+            quote = collect_quote(code, res.get("name", ""))
+        except Exception:
+            quote = None
+        return {"ok": True, "data": res, "quote": quote,
+                "name": res.get("name", ""), "code": code}
     except Exception as e:
         return {"ok": False, "error": str(e)[:300]}
 

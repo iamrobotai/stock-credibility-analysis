@@ -252,19 +252,19 @@ def ai_config():
 
 @app.route("/api/ai/test", methods=["POST"])
 def ai_test():
-    from ai_provider import test_provider
+    from ai_provider import test_connection, test_provider, _LOCAL_PROVIDERS
     data = request.json or {}
-    return jsonify(test_provider(data.get("provider")))
+    provider = data.get("provider")
+    if provider in _LOCAL_PROVIDERS:
+        return jsonify(test_connection(provider))
+    return jsonify(test_provider(provider))
 
 
 @app.route("/api/ai/models/<provider>")
 def ai_models(provider):
     from ai_provider import list_models
     try:
-        models = list_models(provider)
-        if models:
-            return jsonify({"ok": True, "models": models})
-        return jsonify({"ok": False, "error": "未检测到模型，请确认服务已启动"})
+        return jsonify(list_models(provider))
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)[:200]})
 

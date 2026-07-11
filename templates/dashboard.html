@@ -407,6 +407,23 @@ table td { padding: 8px; border-bottom: 1px solid #21262d; }
   </div>
 
   <div id="result" style="display:none;">
+
+    <!-- 股票信息 + 实时行情（直接集成，不单独成页） -->
+    <div id="stockInfoCard" class="card full" style="display:none">
+      <h2>📋 股票信息 <span id="si-source" class="muted" style="font-size:11px;font-weight:normal"></span></h2>
+      <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:baseline">
+        <div>
+          <div id="si-name" style="font-size:18px;font-weight:600"></div>
+          <div id="si-code" class="muted" style="font-size:12px"></div>
+        </div>
+        <div style="text-align:right">
+          <span id="si-price" style="font-size:24px;font-weight:700"></span>
+          <span id="si-change" style="margin-left:8px;font-size:14px"></span>
+        </div>
+      </div>
+      <div id="si-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px 20px;margin-top:12px;font-size:12px"></div>
+    </div>
+
     <div class="grid">
       <!-- 量化资金识别 -->
       <div class="card">
@@ -822,22 +839,30 @@ async function detectModels() {
   try {
     const resp = await fetch('/api/ai/models/' + provider);
     const data = await resp.json();
-    if (data.ok && data.models && data.models.length > 0) {
+    if (data.connected === false) {
+      hint.style.color = '#f85149';
+      hint.textContent = '❌ ' + (data.error || '连接失败，请确认服务已启动');
+      detectedModels = [];
+      return;
+    }
+    hint.style.color = '';
+    if (data.models && data.models.length > 0) {
       detectedModels = data.models;
       modelSelect.innerHTML = '<option value="">-- 选择模型 --</option>' +
         data.models.map(function(m) {
           return '<option value="' + m.id + '">' + m.label + '</option>';
         }).join('');
       modelSelect.style.display = '';
-      hint.textContent = '检测到 ' + data.models.length + ' 个模型';
+      hint.textContent = '✔ 检测到 ' + data.models.length + ' 个模型';
 
-      // 如果当前模型为空，自动选第一个
+      // 当前模型为空时自动选第一个，并自动保存（避免 stale model 导致失败）
       const currentModel = document.getElementById('ai_model').value;
-      if (!currentModel && data.models.length > 0) {
-        document.getElementById('ai_model').value = data.models[0].id;
-      }
+      const pick = (!currentModel && data.models.length > 0) ? data.models[0].id : currentModel;
+      document.getElementById('ai_model').value = pick;
+      await autoSaveModel(provider, pick);
     } else {
-      hint.textContent = '未检测到模型，请确认服务已启动';
+      hint.style.color = '#d29922';
+      hint.textContent = '⚠ ' + (data.warning || '已连接但未检测到模型，请在对应 Server 页加载模型');
       detectedModels = [];
     }
   } catch(e) {
@@ -892,8 +917,8 @@ async function testAI() {
       log('AI 测试通过: ' + provider, 'ok');
     } else {
       resultEl.className = 'ai-status fail';
-      resultEl.textContent = '❌ 失败';
-      log('AI 测试失败: ' + (data.error || '未知错误'), 'fail');
+      resultEl.textContent = '❌ ' + (data.warning || data.error || '连接失败');
+      log('AI 测试失败: ' + (data.warning || data.error || '未知错误'), 'fail');
     }
   } catch(e) {
     resultEl.className = 'ai-status fail';
@@ -1397,6 +1422,38 @@ async function loadQuantCredibility() {
   } catch(e) {
     loading.innerHTML = '<div style="color:#f85149">加载失败: ' + e.message + '</div>';
   }
+}
+
+function renderStockInfo(q){
+  const card=$('#stockInfoCard');
+  if(!q||!q.available){ card.style.display='none'; return; }
+  card.style.display='';
+  $('#si-source').textContent=(q.source==='sina'?'（实时行情 · 新浪）':'（'+(q.source||'行情')+'）');
+  $('#si-name').textContent=q.name||q.code;
+  $('#si-code').textContent=q.code+(q.exchange?(' · '+q.exchange):'');
+  const up=(q.change||0)>=0;
+  const col=up?'#f85149':'#3fb950'; // 涨红跌绿（A股习惯）
+  $('#si-price').style.color=col;
+  $('#si-price').textContent=(q.price!=null?Number(q.price).toFixed(2):'-');
+  $('#si-change').style.color=col;
+  $('#si-change').textContent=(up?'▲':'▼')+' '+(q.change!=null?Number(q.change).toFixed(2):'-')+' ('+(q.change_pct!=null?Number(q.change_pct).toFixed(2):'-')+'%)';
+  const g=[
+    ['今开', q.open],['昨收', q.prev_close],['最高', q.high],['最低', q.low],
+    ['成交量', q.volume!=null?(Number(q.volume)/10000).toFixed(1)+'万手':'-'],
+    ['成交额', q.amount!=null?(Number(q.amount)/1e8).toFixed(2)+'亿':'-'],
+    ['行情时间', (q.date||'')+' '+(q.time||'')]
+  ];
+  $('#si-grid').innerHTML=g.map(function(r){
+    const v=(r[1]==null||r[1]==='')?'-':r[1];
+    return '<div><span class="muted">'+r[0]+'：</span><b>'+v+'</b></div>';
+  }).join('');
+}
+
+function autoSaveModel(provider, model){
+  try{
+    fetch('/api/ai/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({active_provider:provider,providers:{[provider]:{model:model}})});
+  }catch(e){}
 }
 
 function renderQuantCredibility(data) {
@@ -1981,7 +2038,7 @@ async function runOne(){
   try{
     const r=await fetch('/api/quant/'+code);const j=await r.json();
     if(!j.ok){qlog('✗ '+j.error,'fail');$('#status').textContent='失败';return;}
-    render(j.data);$('#status').textContent='完成';qlog('✔ '+code+' 分析完成','ok');
+    render(j.data);if(j.quote)renderStockInfo(j.quote);$('#status').textContent='完成';qlog('✔ '+code+' 分析完成','ok');
   }catch(e){qlog('✗ '+e,'fail');}
 }
 

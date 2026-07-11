@@ -129,10 +129,30 @@ def list_providers():
 
 # -- 模型自动检测 --
 
+def _normalize_v1(url):
+    """规整为 OpenAI 兼容基址（含 /v1）。"""
+    base = (url or "").rstrip("/")
+    if base.endswith("/v1"):
+        return base
+    return base + "/v1"
+
+
+def _conn_err(e):
+    """把连接异常转成中文可读提示。"""
+    msg = str(e)
+    if "Connection" in msg or "refused" in msg.lower():
+        return "无法建立连接（服务未启动或端口不对）"
+    if "timed out" in msg.lower() or "Timeout" in msg:
+        return "连接超时"
+    return msg[:160]
+
+
 def list_models(provider):
     """
-    获取指定提供商的可用模型列表 (仅支持本地提供商)
-    返回 [{"id": "model_name", "label": "display_name"}]
+    获取指定提供商的可用模型列表（结构化）。
+    返回 {"ok", "connected", "models":[{"id","label"}], "error", "warning"}
+    - connected=False 表示服务连不上（端口/未启动）
+    - connected=True 但 models=[] 表示已连上但没加载模型
     """
     cfg = load_config()
     provider_cfg = cfg.get("providers", {}).get(provider, {})
@@ -141,15 +161,19 @@ def list_models(provider):
     elif provider == "lmstudio":
         return _list_lmstudio_models(provider_cfg)
     else:
-        # 云端提供商返回空列表 (模型名手动输入)
-        return []
+        # 云端提供商：模型名手动输入
+        return {"ok": True, "connected": True, "models": [],
+                "warning": "云端提供商请手动填写模型名"}
 
 
 def _list_ollama_models(provider_cfg):
-    """获取 Ollama 已安装的模型列表"""
+    """获取 Ollama 已安装的模型列表（结构化）。"""
     url = provider_cfg.get("url", "http://localhost:11434")
     try:
         r = requests.get(f"{url}/api/tags", timeout=5)
+        if r.status_code != 200:
+            return {"ok": False, "connected": True,
+                    "error": f"Ollama 返回 HTTP {r.status_code}", "models": []}
         data = r.json()
         models = []
         for m in data.get("models", []):
@@ -159,33 +183,47 @@ def _list_ollama_models(provider_cfg):
                 "id": name,
                 "label": f"{name} ({size_mb:.0f}MB)" if size_mb > 0 else name,
             })
-        return models
-    except Exception:
-        return []
+        return {"ok": True, "connected": True, "models": models}
+    except requests.exceptions.ConnectionError:
+        return {"ok": False, "connected": False,
+                "error": "无法连接 Ollama（默认 localhost:11434）。请确认已安装并运行 `ollama serve`。",
+                "models": []}
+    except Exception as e:
+        return {"ok": False, "connected": False,
+                "error": f"Ollama 检测失败：{_conn_err(e)}", "models": []}
 
 
 def _list_lmstudio_models(provider_cfg):
-    """获取 LM Studio 已加载的模型列表"""
+    """获取 LM Studio 已加载的模型列表（结构化，区分「连不上」与「没加载」）。"""
     url = provider_cfg.get("url", "http://localhost:1234/v1")
-    # 去掉末尾的 /v1 再重新拼接，确保格式正确
-    base = url.rstrip("/")
-    if base.endswith("/v1"):
-        api_url = base
-    else:
-        api_url = base + "/v1"
+    api_url = _normalize_v1(url)
     try:
         r = requests.get(f"{api_url}/models", timeout=5)
+        if r.status_code != 200:
+            return {"ok": False, "connected": True,
+                    "error": f"LM Studio 返回 HTTP {r.status_code}（请确认 Server 正常）",
+                    "models": []}
         data = r.json()
         models = []
         for m in data.get("data", []):
             model_id = m.get("id", "")
-            models.append({
-                "id": model_id,
-                "label": model_id,
-            })
-        return models
-    except Exception:
-        return []
+            if model_id:
+                models.append({"id": model_id, "label": model_id})
+        if not models:
+            return {"ok": True, "connected": True, "models": [],
+                    "warning": "已连接到 LM Studio，但未加载任何模型。请在 LM Studio 左侧 Local Server 页面点击 ▶ Load 加载模型，再点「检测模型」。"}
+        return {"ok": True, "connected": True, "models": models}
+    except requests.exceptions.ConnectionError:
+        return {"ok": False, "connected": False,
+                "error": "无法连接 LM Studio（默认 localhost:1234）。请：① 打开 LM Studio → 左侧 Local Server → 点击 ▶ Start Server；② 确认端口与配置一致。",
+                "models": []}
+    except requests.exceptions.Timeout:
+        return {"ok": False, "connected": False,
+                "error": "连接 LM Studio 超时（默认 localhost:1234）。请确认 Server 已启动且端口正确。",
+                "models": []}
+    except Exception as e:
+        return {"ok": False, "connected": False,
+                "error": f"LM Studio 检测失败：{_conn_err(e)}", "models": []}
 
 
 # -- 各提供商调用实现 --
@@ -253,6 +291,37 @@ def _call_openai_compat(messages, provider_cfg, **kwargs):
     return content, stats
 
 
+def test_connection(provider=None):
+    """仅测连通性，不要求已选模型（本地提供商通用）。"""
+    if provider is None:
+        provider = load_config().get("active_provider", "ollama")
+    cfg = load_config()
+    pc = cfg.get("providers", {}).get(provider, {})
+    if provider == "ollama":
+        try:
+            r = requests.get(pc.get("url", "http://localhost:11434") + "/api/tags", timeout=5)
+            return {"ok": r.status_code == 200, "connected": r.status_code == 200,
+                    "error": None if r.status_code == 200 else f"HTTP {r.status_code}"}
+        except Exception as e:
+            return {"ok": False, "connected": False, "error": _conn_err(e)}
+    if provider == "lmstudio":
+        res = _list_lmstudio_models(pc)
+        return {"ok": res.get("connected", False),
+                "connected": res.get("connected", False),
+                "error": res.get("error"), "warning": res.get("warning"),
+                "models": res.get("models", [])}
+    # 云端：必须有 key 才能测
+    if not pc.get("api_key"):
+        return {"ok": False, "connected": False, "error": "未配置 API Key"}
+    try:
+        r = requests.get(pc.get("url", "") + "/models", timeout=8,
+                         headers={"Authorization": f"Bearer {pc['api_key']}"})
+        return {"ok": r.status_code == 200, "connected": r.status_code == 200,
+                "error": None if r.status_code == 200 else f"HTTP {r.status_code}"}
+    except Exception as e:
+        return {"ok": False, "connected": False, "error": _conn_err(e)}
+
+
 def call_ai(messages, provider=None, config=None, **kwargs):
     """
     统一 AI 调用接口
@@ -276,9 +345,23 @@ def call_ai(messages, provider=None, config=None, **kwargs):
     if provider not in _LOCAL_PROVIDERS and not provider_cfg.get("api_key"):
         raise ValueError(f"提供商 {provider} 未配置 API Key")
 
-    # LM Studio 需要模型名
-    if provider == "lmstudio" and not provider_cfg.get("model"):
-        raise ValueError("LM Studio 未选择模型，请先检测并选择已加载的模型")
+    # LM Studio：自动选取已加载模型（消除配置 stale model 导致失败）
+    if provider == "lmstudio":
+        models = _list_lmstudio_models(provider_cfg).get("models", [])
+        if models:
+            cfg_model = provider_cfg.get("model", "")
+            if not cfg_model or cfg_model not in [m["id"] for m in models]:
+                chosen = models[0]["id"]
+                # 持久化，避免下次仍需手动检测
+                try:
+                    _config["providers"]["lmstudio"]["model"] = chosen
+                    save_config(_config)
+                except Exception:
+                    pass
+                provider_cfg = dict(provider_cfg)
+                provider_cfg["model"] = chosen
+        else:
+            raise ValueError("LM Studio 已连接但未加载任何模型，请在 LM Studio 的 Local Server 页点击 ▶ Load 加载模型后再试")
 
     t0 = time.time()
     if provider == "ollama":

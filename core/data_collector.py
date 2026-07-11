@@ -811,6 +811,93 @@ def get_platform_list():
     return [{"id": k, **v} for k, v in PLATFORM_REGISTRY.items()]
 
 
+def _exchange_of(code):
+    """根据代码前缀判断交易所。"""
+    if code.startswith(("6", "9")):
+        return "上交所(SH)"
+    if code.startswith(("0", "3")):
+        return "深交所(SZ)"
+    if code.startswith(("8", "4")):
+        return "北交所(BJ)"
+    return "未知"
+
+
+def collect_quote(code, name=None):
+    """
+    实时行情（新浪 hq），失败优雅降级到 K 线派生。
+    返回 dict:
+      available, source, name, code, exchange,
+      price, open, prev_close, high, low,
+      change, change_pct, volume(手), amount(元), date, time
+    """
+    info = {
+        "available": False, "source": None,
+        "name": name or code, "code": code,
+        "exchange": _exchange_of(code),
+        "price": None, "open": None, "prev_close": None,
+        "high": None, "low": None, "change": None,
+        "change_pct": None, "volume": None, "amount": None,
+        "date": "", "time": "",
+    }
+    # 1) 新浪实时行情（最稳、字段无歧义）
+    try:
+        mkt = "sh" if code.startswith(("6", "9")) else ("sz" if code[0] in "03" else "bj")
+        url = f"http://hq.sinajs.cn/list={mkt}{code}"
+        r = requests.get(url, headers={"Referer": "https://finance.sina.com.cn",
+                                       "User-Agent": UA}, timeout=8)
+        txt = r.content.decode("gbk", errors="ignore")
+        m = re.search(r'="(.*)"\s*;', txt)
+        if m:
+            parts = m.group(1).split(",")
+            if len(parts) >= 11:
+                name_q = parts[0]
+                open_p = _num(parts[1]); prev = _num(parts[2])
+                cur = _num(parts[3]); high = _num(parts[4]); low = _num(parts[5])
+                vol = _num(parts[8])   # 手
+                amt = _num(parts[9])   # 元
+                date_m = re.search(r"\d{4}-\d{2}-\d{2}", txt)
+                time_m = re.search(r"\d{2}:\d{2}:\d{2}", txt)
+                date = date_m.group(0) if date_m else ""
+                t = time_m.group(0) if time_m else ""
+                if cur is not None and prev is not None and prev != 0:
+                    chg = cur - prev
+                    info.update({
+                        "available": True, "source": "sina",
+                        "name": name_q or name or code,
+                        "price": cur, "open": open_p, "prev_close": prev,
+                        "high": high, "low": low, "change": chg,
+                        "change_pct": chg / prev * 100, "volume": vol,
+                        "amount": amt, "date": date, "time": t,
+                    })
+                    return info
+    except Exception:
+        pass
+    # 2) 降级：K 线最后两根
+    try:
+        kl = collect_kline(code)
+        if isinstance(kl, list) and len(kl) >= 2:
+            last = kl[-1]; prev_bar = kl[-2]
+            cur = _num(last.get("close")); prev = _num(prev_bar.get("close"))
+            if cur is not None and prev is not None and prev != 0:
+                chg = cur - prev
+                info.update({
+                    "available": True, "source": "kline派生",
+                    "price": cur,
+                    "open": _num(last.get("open")),
+                    "high": _num(last.get("high")),
+                    "low": _num(last.get("low")),
+                    "prev_close": prev, "change": chg,
+                    "change_pct": chg / prev * 100,
+                    "volume": _num(last.get("volume")),
+                    "amount": None,
+                    "date": str(last.get("date", "")), "time": "收盘",
+                })
+                return info
+    except Exception:
+        pass
+    return info
+
+
 def collect(code, name="", outdir="data", platforms=None, filter_emotion=True,
             use_browser=True, incremental=False):
     """
@@ -917,6 +1004,13 @@ def collect(code, name="", outdir="data", platforms=None, filter_emotion=True,
         except Exception as e:
             result[key] = []
             print(f"  [{key:15s}] FAIL: {e}")
+
+    # 实时行情（独立于平台采集，graceful）
+    try:
+        result["quote"] = collect_quote(code, name)
+    except Exception:
+        result["quote"] = {"available": False, "source": None,
+                              "code": code, "name": name}
 
     outf = os.path.join(outdir, f"{code}_raw.json")
     with open(outf, "w", encoding="utf-8") as f:
