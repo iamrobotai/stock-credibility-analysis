@@ -157,7 +157,9 @@ class MultiTimeframeAnalyzer(_TFA):
 
         # ---- 动量 / 趋势强度 ----
         win = {"day": 20, "week": 13, "month": 6}.get(tf, 20)
-        win = min(win, max(2, n - 1))
+        # 防止 n==2 时 win 取到 2 导致 close[-1-win] 越界(IndexError)。
+        # n>=2 时 win 最多 n-1（保守下限 1），保证 close[-1-win] 索引合法。
+        win = min(win, max(1, n - 1))
         momentum = float(close[-1] / close[-1 - win] - 1.0)
         ma60 = last.get(60, close.mean())
         slope = float(close[-1] / ma60 - 1.0) * 100 if ma60 > 0 else 0.0
@@ -223,6 +225,3 @@ class MultiTimeframeAnalyzer(_TFA):
             "alignment": alignment,
             "composite_quant_score": round(composite, 1),
         }
-
-
-__all__ = ["MultiTimeframeAnalyzer", "TIMEFRAMES", "TF_WEIGHTS"]

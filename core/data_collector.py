@@ -127,9 +127,19 @@ def _filter_emotional_posts(posts, keep_threshold=1):
 # 核心平台
 # ============================================================
 
+def _mkt_prefix(code):
+    """返回行情/akshare 用的市场前缀：6/9→sh(沪)，0/3→sz(深)，8/4→bj(北交)。"""
+    code = str(code)
+    if code.startswith(("6", "9")):
+        return "sh"
+    if code[0] in "03":
+        return "sz"
+    return "bj"
+
+
 def collect_kline(code, days=1095):
     """新浪源 K线（前复权全历史）"""
-    sym = f"sh{code}" if str(code).startswith("6") else f"sz{code}"
+    sym = f"{_mkt_prefix(code)}{code}"
     df = _retry(lambda: ak.stock_zh_a_daily(symbol=sym, adjust="qfq"))
     cutoff = datetime.now() - timedelta(days=days)
     bars = []
@@ -841,7 +851,7 @@ def collect_quote(code, name=None):
     }
     # 1) 新浪实时行情（最稳、字段无歧义）
     try:
-        mkt = "sh" if code.startswith(("6", "9")) else ("sz" if code[0] in "03" else "bj")
+        mkt = _mkt_prefix(code)
         url = f"http://hq.sinajs.cn/list={mkt}{code}"
         r = requests.get(url, headers={"Referer": "https://finance.sina.com.cn",
                                        "User-Agent": UA}, timeout=8)

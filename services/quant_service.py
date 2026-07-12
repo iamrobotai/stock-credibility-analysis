@@ -15,7 +15,9 @@ def run_quant(code: str) -> dict:
     try:
         from quant import engine as QE
         pm = QE.load_peer_map()
-        pa = QE.build_peer_averages(pm)
+        # 单股模式只构建该股自身的 peer 均值（~30ms），
+        # 不再加载全部 176 只（build_peer_averages 实测 ~1.5s）。
+        pa = QE.build_single_peer_avg(code, pm)
         res = QE.run_stock(code, peer_avg=pa)
         if res.get("error"):
             return {"ok": False, "error": res["error"]}
@@ -45,7 +47,7 @@ def llm_report(code: str, provider: str | None = None) -> dict:
         from quant import engine as QE
         from quant import llm_report as LR
         pm = QE.load_peer_map()
-        pa = QE.build_peer_averages(pm)
+        pa = QE.build_single_peer_avg(code, pm)
         res = QE.run_stock(code, peer_avg=pa)
         if res.get("error"):
             return {"ok": False, "error": res["error"]}

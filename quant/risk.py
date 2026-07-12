@@ -71,9 +71,10 @@ def _stress(ret: pd.Series, close: pd.Series) -> dict:
     # 单日极端情景(直接给定损失幅度,与历史分布无关,作为硬性压力)
     out["single_day_-5%"] = -0.05
     out["single_day_-10%"] = -0.10
-    # 连续 5 日 -20% 复合
-    out["five_day_-20%"] = float((1.0 - 0.20) ** (1.0 / 1.0) - 1.0)  # -20% 复合
-    out["five_day_-20%_compound"] = -0.20
+    # 连续 5 日各 -20% 复合：(0.8)^5 - 1 ≈ -67.2%
+    _5d = (1.0 - 0.20) ** 5.0 - 1.0
+    out["five_day_-20%"] = float(_5d)
+    out["five_day_-20%_compound"] = float(_5d)
     # 历史最差 20 日累计收益
     if len(r) >= 20:
         roll = r.rolling(20).sum().min()

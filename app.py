@@ -323,7 +323,9 @@ def ai_models(provider):
 
 @app.route("/api/run", methods=["POST"])
 def api_run():
-    payload = request.json
+    # 防御式解析：空体 / 非法 JSON / 非 JSON Content-Type 时静默降级为 {}，
+    # 避免线程内 AttributeError 被吞掉后任务显示「完成但 0 成功」。
+    payload = request.get_json(silent=True) or {}
     run_id = f"run_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     state = TaskState(run_id, payload)
     tasks[run_id] = state

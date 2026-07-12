@@ -30,7 +30,8 @@ from . import quant_fund_id as QID
 from . import risk as RK
 from . import position as POS
 
-__all__ = ["run_stock", "run_all", "build_peer_averages", "load_peer_map", "DATA_DIR"]
+__all__ = ["run_stock", "run_all", "build_peer_averages",
+            "build_single_peer_avg", "load_peer_map", "DATA_DIR"]
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
@@ -95,6 +96,34 @@ def build_peer_averages(peer_map: dict) -> dict:
         df = pd.concat(series, axis=1)
         avg[code] = df.mean(axis=1)
     return avg
+
+
+def build_single_peer_avg(code: str, peer_map: dict) -> dict:
+    """单股模式：只加载 code 与其同行业 peer 的 kline，构建该股的
+    peer 均值序列。
+
+    避免单股分析时走 build_peer_averages（加载全部 176 只 raw、
+    构建 174 条序列、实测 ~1.5s）的无谓开销——单股请求（Web
+    /api/quant/<code>、LLM 报告）本就用不到其它股票。
+    返回 {code: pd.Series(index=date, value=peer_avg_close)}，缺失则 {}。
+    """
+    if not peer_map or code not in peer_map:
+        return {}
+    peers = peer_map[code]
+    closes = {}
+    for c in [code] + list(peers):
+        raw = _load_raw(c)
+        if not raw:
+            continue
+        kf = F.load_kline(raw)
+        if kf.empty:
+            continue
+        closes[c] = kf.set_index("date")["close"]
+    series = [closes[p] for p in peers if p in closes]
+    if not series:
+        return {}
+    df = pd.concat(series, axis=1)
+    return {code: df.mean(axis=1)}
 
 
 # --------------------------------------------------------------------------- #
@@ -248,18 +277,45 @@ def _build_three(strat_results: dict, qid: dict, raw: dict, feat: pd.DataFrame,
     }
 
 
+def _money(x):
+    """把财务摘要可能的字符串金额(含 亿/万/%/逗号/空格)解析为 float；无法解析返回 None。"""
+    if x is None:
+        return None
+    if isinstance(x, (int, float)):
+        return float(x)
+    s = str(x).strip().replace(",", "")
+    mult = 1.0
+    if "亿" in s:
+        mult = 1e8
+    if "万" in s:
+        mult = 1e4
+    s = s.replace("亿", "").replace("万", "").replace("%", "").replace("元", "").replace(" ", "")
+    if s in ("", "-", "--", "None", "nan", "NaN", "—"):
+        return None
+    try:
+        return float(s) * mult
+    except Exception:
+        return None
+
+
 def _company_outlook(raw: dict) -> dict:
     out = {"net_profit_growth": None, "report_rating_avg": None,
             "report_count": 0, "news_sentiment": None, "news_count": 0}
-    # 业绩:从 financials 取 归母净利润 最新两期
+    # 业绩:从 financials 取「归母净利润」最新两期(容错年份/字符串金额)
+    # akshare 财务摘要的列名为 YYYYMMDD 日期,而非写死的具体年份
     for r in (raw.get("financials") or []):
-        if isinstance(r, dict) and r.get("指标") == "归母净利润":
-            vals = [r.get(k) for k in ("20260331", "20251231") if k in r]
-            vals = [v for v in vals if isinstance(v, (int, float))]
-            if len(vals) >= 2 and vals[1] != 0:
-                g = vals[0] / vals[1] - 1.0
-                out["net_profit_growth"] = round(g, 4)
-            break
+        if not (isinstance(r, dict) and r.get("指标") == "归母净利润"):
+            continue
+        periods = sorted(
+            (k for k in r if isinstance(k, str) and k.isdigit() and len(k) == 8),
+            reverse=True,
+        )
+        if len(periods) >= 2:
+            nv = _money(r.get(periods[0]))
+            ov = _money(r.get(periods[1]))
+            if nv is not None and ov not in (None, 0):
+                out["net_profit_growth"] = round(nv / ov - 1.0, 4)
+        break
     # 研报评级均值(买入=1,增持=0.7,中性=0.4,减持=0.2,卖出=0)
     rating_map = {"买入": 1.0, "增持": 0.7, "中性": 0.4,
                   "减持": 0.2, "卖出": 0.0}
